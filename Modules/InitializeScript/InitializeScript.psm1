@@ -75,8 +75,6 @@ function Write-Settings{
 
         "TxtHead"             = ("# H-Sort Settings","");
 
-        "TxtInfo"             = ("# NOTE: DO NOT USE QUOTATION MARKS","")
-
         "ScriptVersion"       = $ScriptVersion;
 
         "TxtLibraryName"      = ("# Please enter a name for your library folder.",
@@ -85,17 +83,16 @@ function Write-Settings{
 
         "LibraryName"         = "Hlib0";
 
-        "TxtSource"        = ("# Please enter the path to the folder where your Manga are.",
-                                 "# For example, if you have your Manga in a folder named  Manga  on your Desktop,",
-                                 "# enter  C:\Users\YourUserName\Desktop\Manga`r`n");
+        "TxtSource"        = ("# Please enter the path to a source folder.",
+                                 "# For example, if you have your Manga in a folder named [Manga] on your Desktop,",
+                                 "# enter:  C:\Users\YourUserName\Desktop\Manga`r`n");
 
-        "Source"           = "C:\Users\Username\Desktop\Tests\Testinstanzen_reduziert";
+        "Source"           = "C:\Users\YourUserName\Desktop\Manga";
 
-        "TxtTarget" = ("# Please enter a path to a folder to create the library at.",
-        "# For example  C:\Users\YourUserName\Desktop  will create the library on your Desktop.",
-        "# All Manga will then be sorted and saved in the library-folder on your Desktop.`r`n");
+        "TxtTarget" = ("# Where to create the library.",
+            "# For example:  C:\Users\YourUserName\Desktop  will create the library on your Desktop.`r`n");
 
-        "Target"    = "C:\Users\Username\Desktop\HSortOutput"
+        "Target"    = "C:\Users\YourUserName\Desktop\Manga"
         
     }
 
@@ -232,7 +229,7 @@ function Initialize-Script{
         "A Settings file (Settings.txt) was created here:",
         "$($PathsProgram.TxtSettings)",
         " ",
-        "Please edit it to your liking and rerun the script.`n")
+        "Please edit it to your liking and run the script again.`n")
 
         Start-Sleep -Seconds 1.0
         Invoke-Item $PathsProgram.TxtSettings
@@ -266,7 +263,7 @@ function Initialize-Script{
             " ",
             "Settings file (Settings.txt) not found.",
             "New Settings file (Settings.txt) created here:  $($PathsProgram.Settings)",
-            "Please edit it to your liking and rerun the script.")
+            "Please edit it to your liking and run the script again.")
     
             $null = New-Item -ItemType "file" -Path $PathsProgram.TxtSettings
     
@@ -356,7 +353,7 @@ function Initialize-Script{
                                     $InitializeScript_ExitCode = 5
 
                                     Show-Information -InformationText ( "Please copy or move the library folder to the desired location.",
-                                    "Then restart the script.`n")
+                                    "Then run the script again.`n")
     
                                     # Update library-information
                                     $SettingsArchive.$CurrentName.Target = $CurrentParentDir
@@ -532,7 +529,7 @@ function Confirm-Settings{
                 "Invalid Source",
                 "The directory $($CurrentSettings.Source)",
                 "doesn't exist.",
-                "Please change Source in Settings.txt.")
+                "Please change [Source] in Settings.txt.")
             }
         }
         else{
@@ -545,7 +542,7 @@ function Confirm-Settings{
             "Invalid Target",
             "The directory $($CurrentSettings.Target)",
             "doesn't exist.",
-            "Please change Target in Settings.txt.")
+            "Please change [Target] in Settings.txt.")
         }
     }
     else{

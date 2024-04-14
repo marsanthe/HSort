@@ -15,9 +15,10 @@ function Read-Settings{
 
         "LibraryName" = "";
 
-        "LibraryParentDir" = "";
+        "Source" = ""
+        
+        "Target" = "";
 
-        "SourceDir" = ""
     }
 
     foreach($line in [System.IO.File]::ReadLines($Path)) {
@@ -31,12 +32,12 @@ function Read-Settings{
                 $ParsedSettings_Hst[$Matches.Argument] = $Matches.Value
             }
 
-            elseif($line -match "(?<Argument>^LibraryParentDir) += +(?<Value>.+)"){
+            elseif($line -match "(?<Argument>^Target) += +(?<Value>.+)"){
 
                 $ParsedSettings_Hst[$Matches.Argument] = $Matches.Value
             }
 
-            elseif($line -match "(?<Argument>^SourceDir) += +(?<Value>.+)"){
+            elseif($line -match "(?<Argument>^Source) += +(?<Value>.+)"){
 
                 $ParsedSettings_Hst[$Matches.Argument] = $Matches.Value
             }
@@ -84,17 +85,18 @@ function Write-Settings{
 
         "LibraryName"         = "Hlib0";
 
-        "TxtLibraryParentDir" = ("# Please enter a path to a folder to create the library at.",
-                                 "# For example  C:\Users\YourUserName\Desktop  will create the library on your Desktop.",
-                                 "# All Manga will then be sorted and saved in the library-folder on your Desktop.`r`n");
-
-        "LibraryParentDir"    = "C:\Users\Username\Desktop\HSortOutput";
-        
-        "TxtSourceDir"        = ("# Please enter the path to the folder where your Manga are.",
+        "TxtSource"        = ("# Please enter the path to the folder where your Manga are.",
                                  "# For example, if you have your Manga in a folder named  Manga  on your Desktop,",
                                  "# enter  C:\Users\YourUserName\Desktop\Manga`r`n");
 
-        "SourceDir"           = "C:\Users\Username\Desktop\Tests\Testinstanzen_reduziert"
+        "Source"           = "C:\Users\Username\Desktop\Tests\Testinstanzen_reduziert";
+
+        "TxtTarget" = ("# Please enter a path to a folder to create the library at.",
+        "# For example  C:\Users\YourUserName\Desktop  will create the library on your Desktop.",
+        "# All Manga will then be sorted and saved in the library-folder on your Desktop.`r`n");
+
+        "Target"    = "C:\Users\Username\Desktop\HSortOutput"
+        
     }
 
     # Create initial Settings.txt file
@@ -289,9 +291,9 @@ function Initialize-Script{
             }
             else{
 
-                $CurrentParentDir = $CurrentSettings.LibraryParentDir
+                $CurrentParentDir = $CurrentSettings.Target
                 $CurrentName = $CurrentSettings.LibraryName
-                $CurrentSourceDir = $CurrentSettings.SourceDir
+                $CurrentSource = $CurrentSettings.Source
 
                 # Display current settings.
                 Show-Information -InformationText ("YOUR SETTINGS",
@@ -301,9 +303,9 @@ function Initialize-Script{
                 " ",
                 "LibraryName: $($CurrentSettings.LibraryName)",
                 " ",
-                "LibraryParentDir: $($CurrentSettings.LibraryParentDir)",
+                "Target: $($CurrentSettings.Target)",
                 " ",
-                "SourceDir: $($CurrentSettings.SourceDir)",
+                "Source: $($CurrentSettings.Source)",
                 " ",
                 "==========================",
                 " ") 
@@ -335,10 +337,10 @@ function Initialize-Script{
                         
                         Show-Information -InformationText ("SettingsArchive.xml contains CurrentName: $CurrentName`n")
     
-                        ### SUB-CONDITION: Different LibraryParentDir.
+                        ### SUB-CONDITION: Different Target.
                         ### ACTION: Special
 
-                        if($SettingsArchive.$CurrentName.LibraryParentDir -ne $CurrentParentDir){
+                        if($SettingsArchive.$CurrentName.Target -ne $CurrentParentDir){
     
                             Show-Information -InformationText ("WARNING",
                             "==========================",
@@ -357,7 +359,7 @@ function Initialize-Script{
                                     "Then restart the script.`n")
     
                                     # Update library-information
-                                    $SettingsArchive.$CurrentName.LibraryParentDir = $CurrentParentDir
+                                    $SettingsArchive.$CurrentName.Target = $CurrentParentDir
     
                                     # Serialize updated library-information
                                     $SettingsArchive | Export-Clixml -LiteralPath "$($PathsProgram.Settings)\SettingsArchive.xml" -Force
@@ -383,17 +385,17 @@ function Initialize-Script{
                             }
                         }
                         
-                        ### SUB-CONDITION: Same LibraryParentDir but different SourceDir.
+                        ### SUB-CONDITION: Same Target but different Source.
                         ### ACTION: Update Library.
 
-                        elseif($SettingsArchive.$CurrentName.SourceDir -ne $CurrentSourceDir){
+                        elseif($SettingsArchive.$CurrentName.Source -ne $CurrentSource){
 
                             # ExitCode = -2 <=> Library is in SettingsArchive <?> LibraryContent_LibraryName.xml exists
                             $InitializeScript_ExitCode = -2
                             
-                            Show-Information -InformationText ("Updating Library: $CurrentName`n", "From new Source: $CurrentSourceDir")
+                            Show-Information -InformationText ("Updating Library: $CurrentName`n", "From new Source: $CurrentSource")
 
-                            $SettingsArchive.$CurrentName.SourceDir = $CurrentSourceDir
+                            $SettingsArchive.$CurrentName.Source = $CurrentSource
     
                             # Serialize updated library-information.
                             $SettingsArchive | Export-Clixml -LiteralPath "$($PathsProgram.Settings)\SettingsArchive.xml" -Force
@@ -405,11 +407,11 @@ function Initialize-Script{
                         ### SUB-CONDITION: Settings unchanged.
                         ### ACTION: Update Library.
 
-                        elseif($SettingsArchive.$CurrentName.SourceDir -eq $CurrentSourceDir){
+                        elseif($SettingsArchive.$CurrentName.Source -eq $CurrentSource){
 
                             $InitializeScript_ExitCode = -2
 
-                            Show-Information -InformationText ("Updating Library: $CurrentName`n", "From Source: $CurrentSourceDir")
+                            Show-Information -InformationText ("Updating Library: $CurrentName`n", "From Source: $CurrentSource")
 
                             # The only thing that could have changed is the script version.
                             $SettingsArchive | Export-Clixml -LiteralPath "$($PathsProgram.Settings)\SettingsArchive.xml" -Force
@@ -431,7 +433,7 @@ function Initialize-Script{
                     #>
                     else{
 
-                        if(Test-Path "$($CurrentSettings.LibraryParentDir)\$CurrentName"){
+                        if(Test-Path "$($CurrentSettings.Target)\$CurrentName"){
 
                             $InitializeScript_ExitCode = 7
                             
@@ -471,7 +473,7 @@ function Initialize-Script{
 
                 #>
                 else{
-                    if(Test-Path "$($CurrentSettings.LibraryParentDir)\$CurrentName"){
+                    if(Test-Path "$($CurrentSettings.Target)\$CurrentName"){
 
                         Show-Information ("A folder of this name already exists.",
                         "This folder is no known library folder.","Please change LibraryName in Settings.txt.")
@@ -514,11 +516,11 @@ function Confirm-Settings{
     if($CurrentSettings.LibraryName -match "[\w\+\-]+"){
         Write-Information -MessageData "LibraryName $($CurrentSettings.LibraryName): OK`n" -InformationAction Continue
 
-        if(Test-Path -Path $CurrentSettings.LibraryParentDir){
-            Write-Information -MessageData "LibraryParentDir $($CurrentSettings.LibraryParentDir): OK`n" -InformationAction Continue
+        if(Test-Path -Path $CurrentSettings.Target){
+            Write-Information -MessageData "Target $($CurrentSettings.Target): OK`n" -InformationAction Continue
 
-            if(Test-Path -Path $CurrentSettings.SourceDir){
-                Write-Information -MessageData "LibrarySource $($CurrentSettings.SourceDir): OK`n" -InformationAction Continue
+            if(Test-Path -Path $CurrentSettings.Source){
+                Write-Information -MessageData "LibrarySource $($CurrentSettings.Source): OK`n" -InformationAction Continue
             }
             else{
 
@@ -527,10 +529,10 @@ function Confirm-Settings{
                 Show-Information -InformationText("Error",
                 "==========================",
                 " ",
-                "Invalid SourceDir",
-                "The directory $($CurrentSettings.SourceDir)",
+                "Invalid Source",
+                "The directory $($CurrentSettings.Source)",
                 "doesn't exist.",
-                "Please change SourceDir in Settings.txt.")
+                "Please change Source in Settings.txt.")
             }
         }
         else{
@@ -540,10 +542,10 @@ function Confirm-Settings{
             Show-Information -InformationText ("Error",
             "==========================",
             " ",
-            "Invalid LibraryParentDir",
-            "The directory $($CurrentSettings.LibraryParentDir)",
+            "Invalid Target",
+            "The directory $($CurrentSettings.Target)",
             "doesn't exist.",
-            "Please change LibraryParentDir in Settings.txt.")
+            "Please change Target in Settings.txt.")
         }
     }
     else{

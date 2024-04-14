@@ -1,34 +1,40 @@
 
 # HSort
 
-## Note
-This script only works for H-Manga that are named by the E-Hentai [Naming Convention](#naming-convention).<br>
+<p>
+HSort creates a local library from your H-Manga that is tailored to be browsed with Kavita.
+</p>
+
+## Notes
+
+1. This script only works for H-Manga that are named by the E-Hentai [Naming Convention](#naming-convention).<br>
+2. <strong>This script does not modify your source in any way</strong>
 
 ## Overview
 
-- Creates a folder from your Manga that is compatible with Kavita - [Kavita Naming convention / File Structure](https://wiki2.kavitareader.com/guides/scanner) <br>
+- Creates a <strong> Library </strong> (folder) from your Manga that is compatible with Kavita - [Kavita Naming convention / File Structure](https://wiki2.kavitareader.com/guides/scanner) <br>
 
-- Sorts all your Manga by Artists (for generic Manga), Conventions (for Doujinshi) and Anthologies.<br>
+- <strong> Sorts </strong> all your Manga by Artists (for generic Manga), Conventions (for Doujinshi) and Anthologies<br>
 
-- Tags your Manga to help you find your stuff quickly in Kavita.
+- Adds <strong> metadata </strong> (a ComicInfo.xml file) to all H-Manga of your library
 
-## Features
+- <strong> Tags </strong> your Manga to help you find your stuff quickly in Kavita
+
+## Other Features
 
 <p>
-Your source files remain unchanged!
 
-- Creates a Library-folder of your Manga that is compatible with Kavita.<br>
-(No pre-sorting of files/folders required.) <br>
-- Sorts your Manga <br>
-- Allows you to update your Library-folder any time [Updating]
-- Supports creating multiple libraries from different sources.
-- Creates and adds a custom ComicInfo-file to each Manga [ComicInfo].<br>
-- Adds Tags to be used in Kavita like<br> Language, Artist, Convention, Content-Type, Date-Created, Censored/Decensored, Digital,...<br>
-- Automatically finds Variants of titles and duplicates [Variants and Duplicates](#variants-and-duplicates).
-- Creates a report of files/folders
-    - That don't match the E-Hentai naming convention
-    - That have the wrong file-type (Movies, Exes,...)
-    - That are broken Archives
+- Works with any folder.<br>
+As long as it contains items that match the E-Hentai naming scheme,<br>
+it will find them.
+
+- Allows you to update your Library any time [Updating]
+- Supports creating multiple libraries from different sources
+- Automatically finds Variants and Duplicates of your Manga [Variants and Duplicates](#variants-and-duplicates)
+- Creates a report of items, that
+    - don't match the E-Hentai naming convention
+    - have the wrong file-type (Movies, Exes,...)
+    - are broken (Archives)
 
 </p>
 
@@ -39,25 +45,45 @@ Your source files remain unchanged!
 
 ## Manual
 
-### Set-up
+### Step 1: Set-up
 <p>
 
 1. Save the HSort folder anywhere
 2. Open the HSort folder
 3. Inside the folder: [Shift] + [Right Click] -> Select "Open PowerShell window here"
 4. Type in .\HSort and hit enter.
-5. A text-file will open that you'll customize.
+5. A Settings.txt file will open. Edit it to your liking.
 6. Save and close it.
 
 </p>
 
-### Run
+### Step 2: Run
 <p>
 
-1. Open PowerShell again as above if you have closed it.
-2. Type in .\HSort and hit enter.
+1. Open PowerShell again as above (if you have closed it).
+2. Type in .\HSort again and hit enter.
 3. Follow the instructions.
 
+</p>
+
+### About Settings.txt
+
+#### Library Name
+<p>
+The name you want to give the folder (the Library) that'll contain your sorted H-Manga.
+</p>
+
+#### Source
+<strong>This script does not modify your source in any way.</strong>
+<p>
+Any folder that includes H-Manga.
+It doesn't matter if it includes other folders/files as well.
+Non-matching objects will simply be ignored.
+</p>
+
+#### Target
+<p>
+Where the script creates your Library.
 </p>
 
 ## Naming Convention
@@ -78,7 +104,7 @@ This script only works for files (Zip, Rar, Cbz, Cbr) and folders named as shown
 ## Adapting H-Manga to Kavita
 <p>
 Kavita is primarily geard towards readers of western comic-books and "normal" Manga.
-To create a comfortable reading experience for H-Manga some changes had to be made to how Kavita interprets certain tags in a ComicInfo-file.
+To create a comfortable reading experience for H-Manga, some changes had to be made to how Kavita interprets certain tags in a ComicInfo-file.
 </p>
 <p>
 Kavita creates <strong>Collections</strong> based on the [Series Group] tag in a ComicInfo file.<br>

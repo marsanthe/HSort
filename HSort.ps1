@@ -498,7 +498,7 @@ function Format-ObjectName{
     return $Normalized
 }
 
-function Get-Meta{
+function Read-Meta{
 
     Param(
         [Parameter(Mandatory)]
@@ -688,7 +688,7 @@ function Add-VariantToLibrary{
 }
 
 
-function Get-Properties{
+function Read-Properties{
 
     Param(
         [Parameter(Mandatory)]
@@ -896,7 +896,7 @@ function New-VariantNameArray{
 }
 
 
-function Get-Creator{
+function Read-Creator{
 
     <# 
         Until I can come up with a better name...
@@ -1061,7 +1061,7 @@ if ($InitializeScript_ExitCode -le 0) {
     $ConfirmSettings_ExitCode = Confirm-Settings -CurrentSettings $SettingsHt
 
     if ($ConfirmSettings_ExitCode -eq 0) {
-        $DiskSpace_ExitCode = Assert-SufficientDiskSpace -SourceDir $SettingsHt.SourceDir -LibraryParentFolder $SettingsHt.LibraryParentDir -Talkative
+        $DiskSpace_ExitCode = Assert-SufficientDiskSpace -SourceDir $SettingsHt.Source -LibraryParentFolder $SettingsHt.Target -Talkative
 
         if ($DiskSpace_ExitCode -eq 0) {
             $StartScript_ExitCode = Start-Script
@@ -1092,20 +1092,20 @@ else {
 
 $script:PathsLibrary = [ordered]@{
 
-    "Parent"         = "$($SettingsHt.LibraryParentDir)";
-    "Base"           = "$($SettingsHt.LibraryParentDir)\$($SettingsHt.LibraryName)";
+    "Parent"         = "$($SettingsHt.Target)";
+    "Base"           = "$($SettingsHt.Target)\$($SettingsHt.LibraryName)";
 
-    "Library"        = "$($SettingsHt.LibraryParentDir)\$($SettingsHt.LibraryName)\$($SettingsHt.LibraryName)";
+    "Library"        = "$($SettingsHt.Target)\$($SettingsHt.LibraryName)\$($SettingsHt.LibraryName)";
 
-    "SourceDir"      = $SettingsHt.SourceDir;
+    "Source"      = $SettingsHt.Source;
 
-    "Artists"        = "$($SettingsHt.LibraryParentDir)\$($SettingsHt.LibraryName)\$($SettingsHt.LibraryName)\Artists";
-    "Conventions"    = "$($SettingsHt.LibraryParentDir)\$($SettingsHt.LibraryName)\$($SettingsHt.LibraryName)\Conventions";
-    "Anthologies"    = "$($SettingsHt.LibraryParentDir)\$($SettingsHt.LibraryName)\$($SettingsHt.LibraryName)\Anthologies";
+    "Artists"        = "$($SettingsHt.Target)\$($SettingsHt.LibraryName)\$($SettingsHt.LibraryName)\Artists";
+    "Conventions"    = "$($SettingsHt.Target)\$($SettingsHt.LibraryName)\$($SettingsHt.LibraryName)\Conventions";
+    "Anthologies"    = "$($SettingsHt.Target)\$($SettingsHt.LibraryName)\$($SettingsHt.LibraryName)\Anthologies";
 
-    "ComicInfoFiles" = "$($SettingsHt.LibraryParentDir)\$($SettingsHt.LibraryName)\ComicInfoFiles";
+    "ComicInfoFiles" = "$($SettingsHt.Target)\$($SettingsHt.LibraryName)\ComicInfoFiles";
 
-    "Logs"           = "$($SettingsHt.LibraryParentDir)\$($SettingsHt.LibraryName)\Logs"
+    "Logs"           = "$($SettingsHt.Target)\$($SettingsHt.LibraryName)\Logs"
 }
 
 ### End: Paths-LibraryFolder ###
@@ -1120,7 +1120,7 @@ if (($InitializeScript_ExitCode -eq 0) -or ($InitializeScript_ExitCode -eq -1)) 
     Write-Information -MessageData "Creating Library structure..." -InformationAction Continue
 
     foreach ($Path in $PathsLibrary.Keys) {
-        if ($Path -ne "SourceDir" -and $Path -ne "Parent") {
+        if ($Path -ne "Source" -and $Path -ne "Parent") {
             $null = New-Item -ItemType "directory" -Path $PathsLibrary.$Path
         }
     }
@@ -1162,11 +1162,11 @@ elseif($InitializeScript_ExitCode -eq -2) {
 
 ### Begin: GetObjects ###
 
-New-Graph -SourceDir $PathsLibrary.SourceDir
+New-Graph -SourceDir $PathsLibrary.Source
 
 # Hashtable containing all skipped objects.
 $FoundObjectsHt = @{}
-$FoundObjectsHt = Get-Objects -SourceDir $PathsLibrary.SourceDir
+$FoundObjectsHt = Get-Objects -SourceDir $PathsLibrary.Source
 
 $ToProcessLst = [List[object]]::new()
 $ToProcessLst = $FoundObjectsHt.ToProcess
@@ -1215,7 +1215,7 @@ $SortingProgress = 0
 # Becomes the Value of each Key added to VisitedObjects, but has no real function.
 $SortedObjectsCounter = 0
 
-
+# Get custom tokens, if Tokens.txt exists in AppData
 Get-TokenSet
 
 foreach ($Object in $ToProcessLst) {
@@ -1282,15 +1282,15 @@ foreach ($Object in $ToProcessLst) {
             
             $PublishingType = $ObjectNameArray[0]; $Convention = $ObjectNameArray[1]; $Artist = $ObjectNameArray[2]; $Title = $ObjectNameArray[3]; $Meta = $ObjectNameArray[4]
 
-            $Creator = Get-Creator -ObjectNameArray $ObjectNameArray
+            $Creator = Read-Creator -ObjectNameArray $ObjectNameArray
     
             $ValidTokens = Select-MetaTokens -MetaString $Meta
             
             $NewObjectName = New-ObjectName -ObjectNameArray $ObjectNameArray
     
-            [hashtable]$ObjectMeta = Get-Meta -ObjectNameArray $ObjectNameArray -ValidTokens $ValidTokens -CreationDate $CreationDate
+            [hashtable]$ObjectMeta = Read-Meta -ObjectNameArray $ObjectNameArray -ValidTokens $ValidTokens -CreationDate $CreationDate
     
-            [hashtable]$ObjectProperties = Get-Properties -Object $Object -NewName $NewObjectName -NameArray $ObjectNameArray -NameNEX $ObjectNameNEX -Ext $Extension
+            [hashtable]$ObjectProperties = Read-Properties -Object $Object -NewName $NewObjectName -NameArray $ObjectNameArray -NameNEX $ObjectNameNEX -Ext $Extension
     
             [hashtable]$ObjectSelector = New-Selector -NameArray $ObjectNameArray -NewName $NewObjectName
     

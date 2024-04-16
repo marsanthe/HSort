@@ -1,6 +1,11 @@
 
 function New-ComicInfoFile{
+<# 
+.NOTES
+    16/04/2024
+    Kavita 0.8 changed how collections work.
 
+#>
     Param(
         [Parameter(Mandatory)]
         [hashtable]$ObjectMeta,
@@ -55,7 +60,7 @@ function New-ComicInfoFile{
             $XmlObjectWriter.Close()            
             
         }
-        elseif ($PublishingType -eq "GenericManga") {
+        elseif ($PublishingType -eq "Manga") {
    
             $xmlObjectsettings = New-Object System.Xml.XmlWriterSettings
 

@@ -27,13 +27,15 @@ Class Counter {
     [int]$SortedObjects
     [int]$Anthologies
     [int]$Artists
-    [int]$GenericManga
+    [int]$Manga
     [int]$Conventions
     [int]$Doujinshi
     [int]$Skipped
     [int]$Duplicates
     [int]$NoMatch
     [int]$Matches
+    [int]$CopyErrors
+    [int]$NotProcessed
 
     Counter() {
 
@@ -41,13 +43,15 @@ Class Counter {
         $this.SortedObjects = 0
         $this.Anthologies = 0
         $this.Artists = 0
-        $this.GenericManga = 0
+        $this.Manga = 0
         $this.Conventions = 0
         $this.Doujinshi = 0
         $this.Skipped = 0
         $this.Duplicates = 0
         $this.NoMatch = 0
         $this.Matches = 0
+        $this.CopyErrors = 0
+        $this.NotProcessed = 0
     }
 
     [void]AddTitle([string]$PublishingType) {
@@ -55,8 +59,8 @@ Class Counter {
         if ($PublishingType -eq "Anthology") {
             $this.Anthologies += 1
         }
-        elseif ($PublishingType -eq "GenericManga") {
-            $this.GenericManga += 1
+        elseif ($PublishingType -eq "Manga") {
+            $this.Manga += 1
         }
         elseif ($PublishingType -eq "Doujinshi") {
             $this.Doujinshi += 1
@@ -68,8 +72,8 @@ Class Counter {
         if ($PublishingType -eq "Anthology") {
             $this.Anthologies += 1
         }
-        elseif ($PublishingType -eq "GenericManga") {
-            $this.GenericManga += 1
+        elseif ($PublishingType -eq "Manga") {
+            $this.Manga += 1
             $this.Artists += 1
         }
         elseif ($PublishingType -eq "Doujinshi") {
@@ -94,6 +98,14 @@ Class Counter {
 
     [void]ComputeMatches(){
         $this.Matches = ($this.AllObjects - $this.Skipped)
+    }
+
+    [void]AddCopyError(){
+        $this.CopyErrors += 1
+    }
+
+    [void]ComputeNotProcessed(){
+        $this.NotProcessed = $this.Skipped + $this.CopyErrors
     }
 }
 
@@ -311,8 +323,8 @@ function Select-MetaTokens {
     <#
     .DESCRIPTION
         Select valid Tokens from Meta-Section of the object name.
-        Return string of comma seperated tags stored in
-        ObjectMeta.
+        Return string of comma seperated tags
+        to be stored in ObjectMeta.
     #>
 
     Param(
@@ -325,6 +337,7 @@ function Select-MetaTokens {
         
         # Array
         $MetaTokens = $MetaString.Split(",")
+
         $ValidTokenString = ""
 
         for($i = 0; $i -le ($MetaTokens.length -1); $i++){
@@ -337,6 +350,7 @@ function Select-MetaTokens {
 
                 $ValidTokenString += $Token
                 $ValidTokenString += ","
+
             }
         }
         $ValidTokenString = $ValidTokenString.Trim(',')
@@ -348,6 +362,27 @@ function Select-MetaTokens {
     return ($ValidTokenString)
 
 }
+
+
+function Convert-TagsToString{
+    Param(
+        [Parameter(Mandatory)]
+        [List[String]]$TagList
+    )
+
+    $String = ""                                
+ 
+    for($i = 0; $i -le ($List.Count -1); $i++){
+        if($i -le ($List.Count -2)){
+            $String += "$($List[$i]),"
+        }
+        else{
+            $String += "$($List[$i])"
+        }
+    }
+
+    return $String
+} 
 
 function Edit-ObjectNameArray {
 
@@ -498,7 +533,13 @@ function Format-ObjectName{
     return $Normalized
 }
 
-function Read-Meta{
+function Write-Meta{
+    <# 
+    .NOTES
+        16/04/2024
+        Kavita 0.8 changed how collections work.
+
+    #>    
 
     Param(
         [Parameter(Mandatory)]
@@ -528,11 +569,11 @@ function Read-Meta{
     switch($PublishingType)
     {
 
-        "GenericManga" { $ObjectTarget = "$($PathsLibrary.Artists)\$Artist"; $SeriesGroup = $Artist; Break}
+        "Manga" { $ObjectTarget = "$($PathsLibrary.Artists)\$Artist"; $SeriesGroup = $Artist; Break}
 
-        "Doujinshi" { $ObjectTarget = "$($PathsLibrary.Conventions)\$Convention"; $SeriesGroup = $Convention; Break}
+        "Doujinshi" { $ObjectTarget = "$($PathsLibrary.Conventions)\$Convention"; $SeriesGroup = $Convention; Break }
 
-        "Anthology" { $ObjectTarget = $PathsLibrary.Anthologies; $SeriesGroup = $Artist; Break}
+        "Anthology" { $ObjectTarget = $PathsLibrary.Anthologies; $SeriesGroup = $Artist; Break }
         
     }
 
@@ -546,7 +587,7 @@ function Read-Meta{
 
     return @{
         PublishingType = $PublishingType;
-        Format         = "One-Shot";
+        Format         = "Special";
         Convention     = $Convention;
         Artist         = $Artist;
         SeriesGroup    = $SeriesGroup;
@@ -585,7 +626,7 @@ function Add-TitleToLibrary{
     $Title          = $ObjectNameArray[3]                        
 
     
-    if($PublishingType -eq "GenericManga"){
+    if($PublishingType -eq "Manga"){
 
         $LibraryContent.$Artist[$Title] = @{
             "VariantList" = [List[string]]::new();
@@ -654,7 +695,7 @@ function Add-VariantToLibrary{
     $Artist         = $ObjectNameArray[2]
     $Title          = $ObjectNameArray[3]
 
-    if($PublishingType -eq "GenericManga"){
+    if($PublishingType -eq "Manga"){
 
         $LibraryContent.$Artist.$Title[$VariantName] = @{
             ObjectSource    = $Object.FullName;
@@ -688,7 +729,7 @@ function Add-VariantToLibrary{
 }
 
 
-function Read-Properties{
+function Write-Properties{
 
     Param(
         [Parameter(Mandatory)]
@@ -737,7 +778,7 @@ function Read-Properties{
         $ObjectTarget = "$($PathsLibrary.Anthologies)\$Artist"
 
     }
-    elseif($PublishingType -eq "GenericManga"){
+    elseif($PublishingType -eq "Manga"){
 
         $ObjectTarget = "$($PathsLibrary.Artists)\$Artist"
 
@@ -839,7 +880,7 @@ function Remove-FromLibrary{
             $LibraryContent.$Artist.$Title.remove($NewName)
         }
     }
-    elseif($PublishingType -eq "GenericManga"){
+    elseif($PublishingType -eq "Manga"){
 
         if($VariantName -ne ""){
             $LibraryContent.$Artist.$Title.remove($VariantName)
@@ -877,7 +918,7 @@ function New-VariantNameArray{
 
     switch ($PublishingType) {
 
-        "GenericManga" { $VariantNumber = ($LibraryContent.$Artist.$Title.VariantList.Count) - 1; Break }
+        "Manga" { $VariantNumber = ($LibraryContent.$Artist.$Title.VariantList.Count) - 1; Break }
 
         "Doujinshi" { $VariantNumber = ($LibraryContent.$Convention.$Title.VariantList.Count) - 1; Break }
 
@@ -903,7 +944,7 @@ function Read-Creator{
 
         Creator := $Convention for Doujinshi
 
-        Creator := $Artist for GenericManga
+        Creator := $Artist for Manga
 
         Creator := "Anthology" for Anthologies
         (And Artist:= "Anthology" as well...)
@@ -919,7 +960,7 @@ function Read-Creator{
         $Creator = "Anthology"
     }
     
-    elseif($ObjectNameArray[0] -eq "GenericManga"){
+    elseif($ObjectNameArray[0] -eq "Manga"){
         $Creator = "$($ObjectNameArray[2])"
     }
     
@@ -974,6 +1015,28 @@ function Remove-ComicInfo{
     }
 }
 
+<# 
+    function Select-TitleTags{
+        Param(
+            [Parameter(Mandatory)]
+            [string]$Title
+        )
+        $Inseki = [System.Collections.Generic.HashSet[String]] @("Sister", "Onee", "Onee-chan", "Imouto","Brother")
+        $TitleTokens = [System.Collections.Generic.HashSet[String]] @(($Title.Split(" ")))
+
+        if($TitleTokens.Overlaps($Inseki)){
+
+        }
+    }
+#>
+
+### End: Functions ###
+
+#endregion
+
+
+
+
 Show-String -StringArray (" _ _ _     _                      _          _____ _____         _   ",
     "| | | |___| |___ ___ _____ ___   | |_ ___   |  |  |   __|___ ___| |_ ",
     "| | | | -_| |  _| . |     | -_|  |  _| . |  |     |__   | . |  _|  _|",
@@ -987,9 +1050,7 @@ Show-String -StringArray (" _ _ _     _                      _          _____ __
 #     Copy-ScriptOutput -LibraryName $SettingsHt.LibraryName -PSVersion $PSVersion -Delete
 # }
 
-### End: Functions ###
 
-#endregion
 
 
 ### Begin: Setup ###
@@ -1265,9 +1326,9 @@ foreach ($Object in $ToProcessLst) {
             # Every Anthology has $Artist defined as "Anthology" !
             $ObjectNameArray = ("Anthology", "", "Anthology", $Matches.Title, $Matches.Meta)
         }
-        # GenericManga
+        # Manga
         elseif($NormalizedObjectName -match "\A\[(?<Artist>[^\]]*)\](?<Title>[^\[{(]*)(?<Meta>.*)"){
-            $ObjectNameArray = ("GenericManga", "", $Matches.Artist, $Matches.Title, $Matches.Meta)
+            $ObjectNameArray = ("Manga", "", $Matches.Artist, $Matches.Title, $Matches.Meta)
         }
         # NoMatch
         else {
@@ -1288,9 +1349,9 @@ foreach ($Object in $ToProcessLst) {
             
             $NewObjectName = New-ObjectName -ObjectNameArray $ObjectNameArray
     
-            [hashtable]$ObjectMeta = Read-Meta -ObjectNameArray $ObjectNameArray -ValidTokens $ValidTokens -CreationDate $CreationDate
+            [hashtable]$ObjectMeta = Write-Meta -ObjectNameArray $ObjectNameArray -ValidTokens $ValidTokens -CreationDate $CreationDate
     
-            [hashtable]$ObjectProperties = Read-Properties -Object $Object -NewName $NewObjectName -NameArray $ObjectNameArray -NameNEX $ObjectNameNEX -Ext $Extension
+            [hashtable]$ObjectProperties = Write-Properties -Object $Object -NewName $NewObjectName -NameArray $ObjectNameArray -NameNEX $ObjectNameNEX -Ext $Extension
     
             [hashtable]$ObjectSelector = New-Selector -NameArray $ObjectNameArray -NewName $NewObjectName
     
@@ -1460,6 +1521,7 @@ foreach ($ObjectName in $ToCopy.Keys) {
                     Remove-ComicInfo -ObjectSelector $LibraryLookUp.$ObjectName
 
                     Remove-Item -LiteralPath $XMLpath -Force
+                    $Counter.AddCopyError()
                     Continue
                 }
 
@@ -1493,6 +1555,7 @@ foreach ($ObjectName in $ToCopy.Keys) {
                         Remove-ComicInfo -ObjectSelector $LibraryLookUp.$ObjectName
 
                         Remove-Item -LiteralPath "$Target\$ArchiveName" -Force
+                        $Counter.AddCopyError()
                     }
 
                 }
@@ -1510,6 +1573,7 @@ foreach ($ObjectName in $ToCopy.Keys) {
                         Remove-ComicInfo -ObjectSelector $LibraryLookUp.$ObjectName
 
                         Remove-Item -LiteralPath "$Target\$ArchiveName" -Force
+                        $Counter.AddCopyError()
                     }
                 }
 
@@ -1521,12 +1585,14 @@ foreach ($ObjectName in $ToCopy.Keys) {
                 Add-NoCopy -Object $ToCopy.$ObjectName -Reason "HashMismatch"
                 Remove-FromLibrary -LibraryContent $LibraryContent -ObjectSelector $LibraryLookUp.$ObjectName
                 Remove-ComicInfo -ObjectSelector $LibraryLookUp.$ObjectName
+                $Counter.AddCopyError()
             }
         }
         else {
             Add-NoCopy -Object $ToCopy.$ObjectName -Reason "RobocopyError: $($RobocopyExitCode)"
             Remove-FromLibrary -LibraryContent $LibraryContent -ObjectSelector $LibraryLookUp.$ObjectName
             Remove-ComicInfo -ObjectSelector $LibraryLookUp.$ObjectName
+            $Counter.AddCopyError()
         }
     }
 
@@ -1554,6 +1620,7 @@ foreach ($ObjectName in $ToCopy.Keys) {
             Add-NoCopy -Object $ToCopy.$ObjectName -Reason "ErrorCreatingFolder"
             Remove-FromLibrary -LibraryContent $LibraryContent -ObjectSelector $LibraryLookUp.$ObjectName
             Remove-ComicInfo -ObjectSelector $LibraryLookUp.$ObjectName
+            $Counter.AddCopyError()
             Continue
         }
 
@@ -1591,6 +1658,7 @@ foreach ($ObjectName in $ToCopy.Keys) {
                         Add-NoCopy -Object $ToCopy.$ObjectName -Reason "ErrorCreatingArchive"
                         Remove-FromLibrary -LibraryContent $LibraryContent -ObjectSelector $LibraryLookUp.$ObjectName
                         Remove-ComicInfo -ObjectSelector $LibraryLookUp.$ObjectName
+                        $Counter.AddCopyError()
                     }
 
                 }
@@ -1605,6 +1673,7 @@ foreach ($ObjectName in $ToCopy.Keys) {
                         Add-NoCopy -Object $ToCopy.$ObjectName -Reason "ErrorCreatingArchive"
                         Remove-FromLibrary -LibraryContent $LibraryContent -ObjectSelector $LibraryLookUp.$ObjectName
                         Remove-ComicInfo -ObjectSelector $LibraryLookUp.$ObjectName
+                        $Counter.AddCopyError()
                     }
                 }
             }
@@ -1616,6 +1685,7 @@ foreach ($ObjectName in $ToCopy.Keys) {
                 Add-NoCopy -Object $ToCopy.$ObjectName -Reason "HashMismatch"
                 Remove-FromLibrary -LibraryContent $LibraryContent -ObjectSelector $LibraryLookUp.$ObjectName
                 Remove-ComicInfo -ObjectSelector $LibraryLookUp.$ObjectName
+                $Counter.AddCopyError()
             }
             # Whatever happens above, remove the unzipped folder.
             Remove-Item -LiteralPath "$Target\$NewName" -Recurse -Force
@@ -1624,6 +1694,7 @@ foreach ($ObjectName in $ToCopy.Keys) {
             Add-NoCopy -Object $ToCopy.$ObjectName -Reason "RobocopyError: $($RobocopyExitCode)"
             Remove-FromLibrary -LibraryContent $LibraryContent -ObjectSelector $LibraryLookUp.$ObjectName
             Remove-ComicInfo -ObjectSelector $LibraryLookUp.$ObjectName
+            $Counter.AddCopyError()
         }
     }
     ### End: CopyFolder ###
@@ -1661,6 +1732,9 @@ $SkippedObjects | Export-Clixml -Path "$($PathsProgram.Skipped)\Skipped $($Setti
 # Serialize CopiedObjectsHt - necessary for the DeleteOriginals script.
 $CopiedObjects | Export-Clixml -Path "$($PathsProgram.Copied)\CopiedObjects $($SettingsHt.LibraryName).xml" -Force
 
+$Counter.ComputeNotProcessed()
+
+
 
 Show-String -StringArray (" ",
 "Script finished", 
@@ -1685,21 +1759,23 @@ SUMMARY [$Timestamp]
 # FoundObjects: $($Counter.AllObjects)
 =================================================
 
-> SuccessfullyProcessedObjects: $($CopiedObjects.Count)
+> Successfully Copied Objects: $($CopiedObjects.Count)
 
-> Copied $($Counter.GenericManga) Manga from $($Counter.Artists) Artists
+> Found $($Counter.Manga) Manga from $($Counter.Artists) Artists
 
-> Copied $($Counter.Doujinshi) Doujinshi from $($Counter.Conventions) Conventions
+> Found $($Counter.Doujinshi) Doujinshi from $($Counter.Conventions) Conventions
 
-> Copied $($Counter.Anthologies) Anthologies
+> Found $($Counter.Anthologies) Anthologies
 
 
-# SkippedObjects: $($Counter.Skipped)
+# Objects not copied: $($Counter.NotProcessed)
 =================================================
 
 > Duplicates: $($Counter.Duplicates)
 
 > UnmatchedObjects: $($Counter.NoMatch)
+
+> Copy Errors: $($Counter.CopyErrors)
 
 > Single files with
   wrong extension (.mov,.mp4,.pdf,...): $WrongExtensionCounter
@@ -1718,6 +1794,6 @@ $Summary | Out-File -FilePath "$($PathsLibrary.Logs)\ProgramLog $Timestamp.txt" 
 
 
 # For debugging only
-# Copy-ScriptOutput -LibraryName $SettingsHt.LibraryName -PSVersion $PSVersion -Delete
+Copy-ScriptOutput -LibraryName $SettingsHt.LibraryName -PSVersion $PSVersion -Delete
 
 ### End: Finalizing ###

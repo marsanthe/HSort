@@ -214,7 +214,7 @@ function Get-TokenSet{
 
     <# 
         .NOTES
-        $TokenSet is referenced by Select-MetaTokens
+        $TokenSet is referenced by Select-MetaTags
     #>
 
     $TokenSetImportFlag = 0
@@ -319,7 +319,28 @@ function Show-String {
     }
 }
 
-function Select-MetaTokens {
+function Convert-ListToString {
+    Param(
+        [Parameter(Mandatory)]
+        [List[String]]$List
+    )
+
+    $String = ""                                
+ 
+    for ($i = 0; $i -le ($List.Count - 1); $i++) {
+        if ($i -le ($List.Count - 2)) {
+            $String += "$($List[$i]),"
+        }
+        else {
+            $String += "$($List[$i])"
+        }
+    }
+
+    return $String
+} 
+
+
+function Select-MetaTags {
     <#
     .DESCRIPTION
         Select valid Tokens from Meta-Section of the object name.
@@ -336,53 +357,35 @@ function Select-MetaTokens {
     if ($MetaString -ne "") {
         
         # Array
-        $MetaTokens = $MetaString.Split(",")
+        MetaTokenArray = $MetaString.Split(",")
 
-        $ValidTokenString = ""
+        $MetaTokenList = [List[string]]::new()
 
-        for($i = 0; $i -le ($MetaTokens.length -1); $i++){
+        for($i = 0; $i -le (MetaTokenArray.length -1); $i++){
 
             # Remove all non-word characters.
             # 02/04/2024 Use string-invariants
-            $Token = $MetaTokens[$i] -replace '[^a-zA-Z]', ''
+            $Token = MetaTokenArray[$i] -replace '[^a-zA-Z]', ''
 
             if ($TokenSet.Contains($Token)) {
 
-                $ValidTokenString += $Token
-                $ValidTokenString += ","
+                $MetaTokenList.Add($Token)
 
             }
         }
-        $ValidTokenString = $ValidTokenString.Trim(',')
+        
+        $MetaTags = Convert-ListToString -List $MetaTokenList
     }
-    else {
-        $ValidTokenString = ""
+    else{
+        $MetaTags = ""
     }
 
-    return ($ValidTokenString)
+
+    return $MetaTags
 
 }
 
 
-function Convert-TagsToString{
-    Param(
-        [Parameter(Mandatory)]
-        [List[String]]$TagList
-    )
-
-    $String = ""                                
- 
-    for($i = 0; $i -le ($List.Count -1); $i++){
-        if($i -le ($List.Count -2)){
-            $String += "$($List[$i]),"
-        }
-        else{
-            $String += "$($List[$i])"
-        }
-    }
-
-    return $String
-} 
 
 function Edit-ObjectNameArray {
 
@@ -547,7 +550,7 @@ function Write-Meta{
 
         [Parameter(Mandatory)]
         [AllowEmptyString()]
-        [string]$ValidTokens,
+        [string]$TagsCSV,
 
         [Parameter(Mandatory)]
         [string]$CreationDate
@@ -577,9 +580,9 @@ function Write-Meta{
         
     }
 
-    if(! $ValidTokens -eq ""){
+    if(! $TagsCSV -eq ""){
 
-        $Tags = "$PublishingType,$yyyy,$MM,$ValidTokens"
+        $Tags = "$PublishingType,$yyyy,$MM,$TagsCSV"
     }
     else{
         $Tags = "$PublishingType,$yyyy,$MM"
@@ -1345,11 +1348,11 @@ foreach ($Object in $ToProcessLst) {
 
             $Creator = Read-Creator -ObjectNameArray $ObjectNameArray
     
-            $ValidTokens = Select-MetaTokens -MetaString $Meta
+            $MetaTags = Select-MetaTags -MetaString $Meta
             
             $NewObjectName = New-ObjectName -ObjectNameArray $ObjectNameArray
     
-            [hashtable]$ObjectMeta = Write-Meta -ObjectNameArray $ObjectNameArray -ValidTokens $ValidTokens -CreationDate $CreationDate
+            [hashtable]$ObjectMeta = Write-Meta -ObjectNameArray $ObjectNameArray -TagsCSV $MetaTags -CreationDate $CreationDate
     
             [hashtable]$ObjectProperties = Write-Properties -Object $Object -NewName $NewObjectName -NameArray $ObjectNameArray -NameNEX $ObjectNameNEX -Ext $Extension
     

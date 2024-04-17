@@ -7,7 +7,7 @@ Import-Module -Name "$CallDirectory\Modules\CreateComicInfoXML\CreateComicInfoXM
 Import-Module -Name "$CallDirectory\Modules\CreateLogFiles\CreateLogFiles.psm1"
 Import-Module -Name "$CallDirectory\Modules\InitializeScript\InitializeScript.psm1"
 Import-Module -Name "$CallDirectory\Modules\DiskSpace\DiskSpace.psm1"
-Import-Module -Name "$CallDirectory\Modules\ObjectData\ObjectData.psm1" -Verbose
+Import-Module -Name "$CallDirectory\Modules\ObjectData\ObjectData.psm1" 
 
 $ErrorActionPreference = "Stop"
 
@@ -149,15 +149,15 @@ function Copy-ScriptOutput {
     }
 }
 
-function Read-TokensFromFile {
+function Read-TagsFromFile {
 
     Param(
         [Parameter(Mandatory)]
         [string]$Path 
     )
 
-    $TokenTable = @{}
-    $TokenList = [List[string]]::new()
+    $TagsHt = @{}
+    $TagSet = [HashSet[string]]::new()
 
     foreach ($line in [System.IO.File]::ReadLines($Path)) {
         
@@ -165,9 +165,9 @@ function Read-TokensFromFile {
 
             if ($line -match "^\[(?<Category>.+)\]") {
 
-                if ($TokenList.Count -gt 0) {
-                    $null = $TokenTable.Add($Category, $TokenList)
-                    $TokenList = [List[string]]::new()
+                if ($TagSet.Count -gt 0) {
+                    $null = $TagsHt.Add($Category, $TagSet)
+                    $TagSet = [List[string]]::new()
                 }
 
                 $Category = $Matches.Category
@@ -176,74 +176,53 @@ function Read-TokensFromFile {
             elseif ($Line.StartsWith("%")) {
 
                 # The file has to end with any number of "%%%%"
-                $TokenTable.Add($Category, $TokenList)
+                $TagsHt.Add($Category, $TagSet)
 
             }
             else {
-                $null = $TokenList.Add($line)
+                $null = $TagSet.Add($line)
             }
-
-        }
-    
-    }
-    return $TokenTable
-}
-
-
-function Import-TokenSet {
-
-    Param(
-        [Parameter(Mandatory)]
-        [string]$Path
-    )
-
-    $TokenTable = Read-TokensFromFile -Path $Path
-
-    $TokenSet = [HashSet[string]]::new()
-    
-    foreach ($Category in $TokenTable.Keys) {
-        foreach ($Token in $TokenTable.$Category) {
-            $null = $TokenSet.Add($Token)
         }
     }
 
-    return $TokenSet
+    $TagsHt | Export-Clixml -Path "$($PathsLibrary.Logs)\Tags.xml" -Force
+    return $TagsHt
 }
 
-function Get-TokenSet{
+
+function Get-Tags{
 
     <# 
         .NOTES
-        $TokenSet is referenced by Select-MetaTags
+        $TagSetMeta is referenced by Find-Tags
     #>
 
-    $TokenSetImportFlag = 0
+    $ImportFlag = 0
 
-    if(Test-Path "$($PathsProgram.AppData)\Tokens.txt"){
-
-        $global:TokenSet = Import-TokenSet -Path "$($PathsProgram.AppData)\Tokens.txt"
-
-        # In case $TokenSet evals to $null
-        if(-not $TokenSet){
-            $TokenSetImportFlag = 1
+    if (Test-Path "$CallDirectory\Tags.txt") {
+        
+        $TagsHt = Read-TagsFromFile -Path "$CallDirectory\Tags.txt"
+        
+        # In case $TagsHt evals to $null
+        if(-not $TagsHt){
+            $ImportFlag = 1
         }
     }
     else{
-        $TokenSetImportFlag = 2
+        $ImportFlag = 2
     }
 
-    # If Tokens.txt doesn't exist or TokenSet evals to $null
-    if ($TokenSetImportFlag -gt 0) {
+    # If Tags.txt doesn't exist or TagsHt evals to $null
+    if ($ImportFlag -gt 0) {
 
-        $TokenArray = ("English", "Eng", "Japanese", "Digital", "Censored", "Uncensored", "Decensored", "Full color")
+        $TagSetMeta = [System.Collections.Generic.HashSet[String]] @("English", "Eng", "Japanese", "Digital", "Censored", "Uncensored", "Decensored", "Full color")
 
-        $global:TokenSet = [HashSet[string]]::new()
-
-        # Since PS 5.1 has no range()...
-        for ($i = 0; $i -le ($TokenArray.Length - 1); $i += 1 ) {
-            $null = $TokenSet.Add($TokenArray[$i])
+        $TagsHt = @{
+            "Meta" = $TagSetMeta
         }
     }
+
+    return $TagsHt
 }
 
 function Add-NoCopy {
@@ -347,6 +326,8 @@ function Edit-ObjectNameArray {
             # If token is Meta.
             if ($i -eq 4) {
 
+                # Remove double extensions,
+                # example: "File.zip.cbz"
                 $Token = $Token.trim('.zip')
                 $Token = $Token.trim('.rar')
                 $Token = $Token.trim('.cbz')
@@ -447,12 +428,15 @@ function Add-TitleToLibrary{
     if($PublishingType -eq "Manga"){
 
         $LibraryContent.$Artist[$Title] = @{
+
             "VariantList" = [List[string]]::new();
+
             $NewName = @{
                 ObjectSource    = $Object.FullName;
                 ObjectLocation  = "$($PathsLibrary.Artists)\$Artist";
                 FirstDiscovered = $Timestamp 
             }
+
         }
 
         # Add Base Variant
@@ -462,12 +446,15 @@ function Add-TitleToLibrary{
     elseif($PublishingType -eq "Doujinshi"){
 
         $LibraryContent.$Convention[$Title] = @{
+
             "VariantList" = [List[string]]::new();
+
             $NewName = @{
                 ObjectSource    = $Object.FullName;
                 ObjectLocation  = "$($PathsLibrary.Conventions)\$Convention";
                 FirstDiscovered = $Timestamp;
             }
+
         }  
 
         $null = $LibraryContent.$Convention.$Title.VariantList.add($NewName)
@@ -476,12 +463,15 @@ function Add-TitleToLibrary{
     elseif($PublishingType -eq "Anthology"){
 
         $LibraryContent.Anthology[$Title] = @{
+
             "VariantList" = [List[string]]::new();
+
            $NewName = @{
                 ObjectSource    = $Object.FullName;
                 ObjectLocation  = "$($PathsLibrary.Anthologies)\$Artist";
                 FirstDiscovered = $Timestamp;
             }
+
         }
 
         $null = $LibraryContent.Anthology.$Title.VariantList.add($NewName)
@@ -672,22 +662,6 @@ function Remove-ComicInfo{
     }
 }
 
-<# 
-    function Select-TitleTags{
-        Param(
-            [Parameter(Mandatory)]
-            [string]$Title
-        )
-        $Inseki = [System.Collections.Generic.HashSet[String]] @("Sister", "Onee", "Onee-chan", "Imouto","Brother")
-        $TitleTokens = [System.Collections.Generic.HashSet[String]] @(($Title.Split(" ")))
-
-        if($TitleTokens.Overlaps($Inseki)){
-
-        }
-    }
-#>
-
-### End: Functions ###
 
 #endregion
 
@@ -712,7 +686,7 @@ Show-String -StringArray (" _ _ _     _                      _          _____ __
 
 ### Begin: Setup ###
 
-$ScriptVersion = "V004"
+$ScriptVersion = "V0.1"
 
 $7zip = "$env:ProgramFiles\7-Zip\7z.exe"
 
@@ -933,8 +907,7 @@ $SortingProgress = 0
 # Becomes the Value of each Key added to VisitedObjects, but has no real function.
 $SortedObjectsCounter = 0
 
-# Get custom tokens, if Tokens.txt exists in AppData
-Get-TokenSet
+
 
 foreach ($Object in $ToProcessLst) {
     
@@ -1001,8 +974,11 @@ foreach ($Object in $ToProcessLst) {
             $PublishingType = $ObjectNameArray[0]; $Convention = $ObjectNameArray[1]; $Artist = $ObjectNameArray[2]; $Title = $ObjectNameArray[3]; $Meta = $ObjectNameArray[4]
 
             $Creator = Read-Creator -ObjectNameArray $ObjectNameArray
+
+            # Get custom tags, if Tags.txt exists in HSort
+            $TagsHt = Get-Tags
             
-            $MetaTags = Select-MetaTags -MetaString $Meta
+            $MetaTags = Find-Tags -MetaString $Meta -Title $Title -TagsHt $TagsHt
             
             $NewObjectName = New-ObjectName -ObjectNameArray $ObjectNameArray
     
@@ -1044,7 +1020,7 @@ foreach ($Object in $ToProcessLst) {
     
                 # Update ObjectNewName in ObjectProperties. Needed in Copying.
                 $ObjectProperties.ObjectNewName = $VariantObjectName
-                # Specific ObjectSelector for variants.
+                # Special ObjectSelector for variants.
                 $ObjectSelector.VariantObjectName = "$VariantObjectName"
 
                 $ObjectMeta.Tags = "$($ObjectMeta.Tags),Variant"

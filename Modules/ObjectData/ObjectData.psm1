@@ -41,7 +41,7 @@ function New-ObjectName {
             $NewObName += $Token
         }
 
-        # Add spce between Tokens
+        # Add space between Tokens
         else {
             $NewObName += " $Token"
         }
@@ -112,7 +112,7 @@ function Convert-ListToString {
 } 
 
 
-function Select-MetaTags {
+function Find-Tags {
     <#
     .DESCRIPTION
         Select valid Tokens from Meta-Section of the object name.
@@ -123,15 +123,33 @@ function Select-MetaTags {
     Param(
         [Parameter(Mandatory)]
         [AllowEmptyString()]
-        [string]$MetaString
+        [string]$MetaString,
+
+        [string]$Title,
+
+        [hashtable]$TagsHt
+
     )
+
+    $TagList = [List[string]]::new()
+    
+    $Title = $Title.ToLower()
+    $TitleTokenSet = [System.Collections.Generic.HashSet[String]] @(($Title.Split(" ")))
+
+    foreach ($Category in $TagsHt.Keys) {
+        if($TagsHt.$Category.Count -gt 0){
+            if($Category -ne "Meta"){
+                if ($TitleTokenSet.Overlaps($TagsHt.$Category)) {
+                    $TagList.Add("$Category")
+                }
+            }
+        }
+    }
 
     if ($MetaString -ne "") {
         
         # Array
         $MetaTokenArray = $MetaString.Split(",")
-
-        $MetaTokenList = [List[string]]::new()
 
         for ($i = 0; $i -le ($MetaTokenArray.length - 1); $i++) {
 
@@ -139,24 +157,21 @@ function Select-MetaTags {
             # 02/04/2024 Use string-invariants
             $Token = $MetaTokenArray[$i] -replace '[^a-zA-Z]', ''
 
-            if ($TokenSet.Contains($Token)) {
+            if ($TagsHt.Meta.Contains($Token)) {
 
-                $MetaTokenList.Add($Token)
+                $TagList.Add($Token)
 
             }
         }
-        
-        if ($MetaTokenList.Count -gt 0) {
-            $MetaTags = Convert-ListToString -List $MetaTokenList
-        }
-        else {
-            $MetaTags = ""
-        }        
-    }
-    else {
-        $MetaTags = ""
+ 
     }
 
+    if ($TagList.Count -gt 0) {
+        $MetaTags = Convert-ListToString -List $TagList
+    }
+    else{
+        $MetaTags = ""
+    }
 
     return $MetaTags
 
@@ -351,4 +366,4 @@ function New-Selector {
     }
 }
 
-Export-ModuleMember -Function New-ObjectName,Read-Creator,Convert-ListToString,Select-MetaTags,Write-Meta,Write-Properties,New-Selector -Variable Name,Creator,String,MetaTags
+Export-ModuleMember -Function New-ObjectName,Read-Creator,Convert-ListToString,Find-Tags,Write-Meta,Write-Properties,New-Selector -Variable Name,Creator,String,MetaTags

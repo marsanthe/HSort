@@ -185,7 +185,6 @@ function Read-TagsFromFile {
         }
     }
 
-    $TagsHt | Export-Clixml -Path "$($PathsLibrary.Logs)\Tags.xml" -Force
     return $TagsHt
 }
 
@@ -194,7 +193,7 @@ function Get-Tags{
 
     <# 
         .NOTES
-        $TagSetMeta is referenced by Find-Tags
+        $TagsHt is referenced by Find-Tags
     #>
 
     $ImportFlag = 0
@@ -934,7 +933,13 @@ foreach ($Object in $ToProcessLst) {
         $Extension     = "Folder"
 
         $FolderFirstElement = Get-ChildItem -LiteralPath $Object.FullName -Force -File | Select-Object -First 1
-        $CreationDate = $FolderFirstElement.LastWriteTime.ToString("yyyy-MM-dd")
+        try {
+            
+            $CreationDate = $FolderFirstElement.LastWriteTime.ToString("yyyy-MM-dd")
+        }
+        catch {
+            $CreationDate = "Error"
+        }
 
     }
 

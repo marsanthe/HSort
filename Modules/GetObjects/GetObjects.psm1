@@ -32,7 +32,7 @@ function New-Graph{
     $Graph.Clear()
 
     # Get all nodes (folders).
-    # This does not include the root directory iteself.
+    # This does NOT include the root directory iteself.
     $AllNodes_ObjectArray = (Get-ChildItem -LiteralPath $SourceDir -Directory -Recurse)
 
     ### Begin: Insert Root Node ###
@@ -174,6 +174,7 @@ function Get-Objects{
 
     <#
         .NOTES
+        IMPORTANT
         When encountering a leaf-folder with mixed content,
         we add the files that have an allowed extension to $ToProcessLst;
         but we do NOT add the folder itself!
@@ -190,20 +191,40 @@ function Get-Objects{
         foreach($File in $Files){
 
             $FileExtension = [System.IO.Path]::GetExtension($File)
+
             $null = $CurrentFileExtensions_Set.Add($FileExtension)
+
             if($IsArchive_Set.Contains($FileExtension)){
                 $null = $ToProcessLst.Add($File)
             }
         }
 
-        # Add leaf-node itself to $ToProcessLst IFF it only contains ImageFiles.
-        if($CurrentFileExtensions_Set.isSubsetOf($IsImage_Set)){
+        # Add leaf-node itself to $ToProcessLst IFF it only contains ImageFiles and is not empty.
+        ## DISMISS EMPTY LEAF-NODES by ensuring that CurrentFileExtension_Set is not empty.
+        if ($CurrentFileExtensions_Set.Count -gt 0){
 
-            $null = $ToProcessLst.Add($LeafNode)
-
+            if ($CurrentFileExtensions_Set.isSubsetOf($IsImage_Set)) {
+    
+                $null = $ToProcessLst.Add($LeafNode)
+    
+            }
+            # If folder has mixed content, add to SkippedObjects.
+            elseif(!$CurrentFileExtensions_Set.isSubsetOf($IsArchive_Set)) {
+    
+                $BadFolderCounter += 1
+    
+                $SkippedObjectProperties = @{
+                    ObjectParent = (Split-Path -Parent $LeafNode.FullName);
+                    Path = $LeafNode.FullName;
+                    ObjectName = $LeafNode.Name;
+                    Reason = "UnsupportedOrMixedContent";
+                    Extension = "Folder"}
+    
+                $SkippedObjectsHt.Add("$($LeafNode.FullName)",$SkippedObjectProperties)
+            }
         }
-        # If folder has mixed content, add to SkippedObjects.
-        elseif(!$CurrentFileExtensions_Set.isSubsetOf($IsArchive_Set)) {
+        # Empty leaf-node
+        else{
 
             $BadFolderCounter += 1
 
@@ -211,10 +232,10 @@ function Get-Objects{
                 ObjectParent = (Split-Path -Parent $LeafNode.FullName);
                 Path = $LeafNode.FullName;
                 ObjectName = $LeafNode.Name;
-                Reason = "UnsupportedOrMixedContent";
+                Reason = "EmptyLeafNode";
                 Extension = "Folder"}
 
-            $SkippedObjectsHt.Add("$($LeafNode.FullName)",$SkippedObjectProperties)
+            $SkippedObjectsHt.Add("$($LeafNode.FullName)",$SkippedObjectProperties)            
         }
 
         $CurrentFileExtensions_Set.Clear()

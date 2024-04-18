@@ -918,6 +918,8 @@ foreach ($Object in $ToProcessLst) {
     $ObjectPath = $Object.FullName
     $IsFile     = ($Object -is [system.io.fileinfo])
 
+    Write-Information -MessageData $ObjectName -InformationAction Continue
+
     if ($IsFile) {
 
         $ObjectNameNEX = $ObjectName.Substring(0, $ObjectName.LastIndexOf('.'))
@@ -933,13 +935,14 @@ foreach ($Object in $ToProcessLst) {
         $Extension     = "Folder"
 
         $FolderFirstElement = Get-ChildItem -LiteralPath $Object.FullName -Force -File | Select-Object -First 1
-        try {
+        $CreationDate = $FolderFirstElement.LastWriteTime.ToString("yyyy-MM-dd")
+        # try {
             
-            $CreationDate = $FolderFirstElement.LastWriteTime.ToString("yyyy-MM-dd")
-        }
-        catch {
-            $CreationDate = "Error"
-        }
+        #     $CreationDate = $FolderFirstElement.LastWriteTime.ToString("yyyy-MM-dd")
+        # }
+        # catch {
+        #     $CreationDate = "Error"
+        # }
 
     }
 

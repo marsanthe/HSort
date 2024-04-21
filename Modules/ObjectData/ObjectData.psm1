@@ -123,7 +123,7 @@ function Find-Tags {
     Param(
         [Parameter(Mandatory)]
         [AllowEmptyString()]
-        [string]$MetaString,
+        [string]$MetaTokenString,
 
         [string]$Title,
 
@@ -146,16 +146,16 @@ function Find-Tags {
         }
     }
 
-    if ($MetaString -ne "") {
+    if ($MetaTokenString -ne "") {
         
+        # reduce variance
+        $MetaTokenString = $MetaTokenString.ToLower()
         # Array
-        $MetaTokenArray = $MetaString.Split(",")
+        $MetaTokenArray = $MetaTokenString.Split(",")
 
         for ($i = 0; $i -le ($MetaTokenArray.length - 1); $i++) {
 
-            # Remove all non-word characters.
-            # 02/04/2024 Use string-invariants
-            $Token = $MetaTokenArray[$i] -replace '[^a-zA-Z]', ''
+            $Token = $MetaTokenArray[$i]
 
             if ($TagsHt.Meta.Contains($Token)) {
 
@@ -274,12 +274,25 @@ function Write-Properties {
             $NewExtension = $Ext
         }
 
-        $SourceHash = (Get-FileHash -LiteralPath $Object.FullName -Algorithm MD5).hash
+        if($SaveCopyFlag -eq 0){
+
+            $SourceHash = (Get-FileHash -LiteralPath $Object.FullName -Algorithm MD5).hash
+        }
+        else{
+            $SourceHash = 0
+        }
 
     }
     else {
+
         $NewExtension = ""
-        $SourceHash = (($Object | Get-ChildItem) | Measure-Object -Sum Length).sum
+
+        if($SaveCopyFlag -eq 0){
+            $SourceHash = (($Object | Get-ChildItem) | Measure-Object -Sum Length).sum
+        }
+        else{
+            $SourceHash = 0
+        }
     }
 
     $PublishingType = $NameArray[0]

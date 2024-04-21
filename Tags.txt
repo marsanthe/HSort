@@ -1,14 +1,14 @@
 #Tags
 
 [Meta]
-English 
-Eng
-Japanese
-Digital
-Censored
-Uncensored
-Decensored
-Full color
+english
+eng
+japanese
+digital
+censored
+uncensored
+decensored
+full color
 
 [Sister]
 sister
@@ -24,6 +24,32 @@ siblings
 brother
 onii
 onii-chan
+
+[Inseki]
+sister
+sister's
+sister-
+-sister
+sisters
+onee
+onee-chan
+imouto
+sibling
+siblings
+brother
+onii
+onii-chan
+niece
+daughter
+daddy
+papa
+uncle
+family
+aunt
+incest
+inseki
+sis
+sis's
 
 
 %%%%

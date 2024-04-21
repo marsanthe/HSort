@@ -48,6 +48,8 @@ function New-ComicInfoFile{
         
                 $XmlObjectWriter.WriteElementString("Title", ($ObjectMeta.Title))
                 $XmlObjectWriter.WriteElementString("Series", ($ObjectMeta.Series)) # $Title
+                $XmlObjectWriter.WriteElementString("Count", 1) # NEW 18/04/2024
+                $XmlObjectWriter.WriteElementString("Volume", 1) # NEW 18/04/2024
                 $XmlObjectWriter.WriteElementString("Tags", ($ObjectMeta.Tags))
                 $XmlObjectWriter.WriteElementString("Format", ($ObjectMeta.Format))
                 $XmlObjectWriter.WriteElementString("SeriesGroup", ($ObjectMeta.PublishingType)) # Kavita creates groups by the SeriesGroup tag Grouping by PublishingType
@@ -79,6 +81,8 @@ function New-ComicInfoFile{
         
                 $XmlObjectWriter.WriteElementString("Title", ($ObjectMeta.Title))
                 $XmlObjectWriter.WriteElementString("Series", ($ObjectMeta.Series)) # Series is Title
+                $XmlObjectWriter.WriteElementString("Count", 1) # NEW 18/04/2024
+                $XmlObjectWriter.WriteElementString("Volume", 1) # NEW 18/04/2024
                 $XmlObjectWriter.WriteElementString("Writer", ($ObjectMeta.Artist)) # Kavita only knows writer, so writer:=artist
                 $XmlObjectWriter.WriteElementString("Tags", ($ObjectMeta.Tags))
                 $XmlObjectWriter.WriteElementString("Format", ($ObjectMeta.Format))
@@ -111,7 +115,9 @@ function New-ComicInfoFile{
                 $XmlObjectWriter.WriteAttributeString("xmlns", "xsd", $null, "http://www.w3.org/2001/XMLSchema")
         
                 $XmlObjectWriter.WriteElementString("Title", ($ObjectMeta.Title))
-                $XmlObjectWriter.WriteElementString("Series", ($ObjectMeta.Series)) # Series is Title 
+                $XmlObjectWriter.WriteElementString("Series", ($ObjectMeta.Series)) # Series is Title
+                $XmlObjectWriter.WriteElementString("Count", 1) # NEW 18/04/2024
+                $XmlObjectWriter.WriteElementString("Volume", 1) # NEW 18/04/2024
                 $XmlObjectWriter.WriteElementString("Writer", ($ObjectMeta.Artist)) # Kavita only knows writer, so writer:=artist
                 $XmlObjectWriter.WriteElementString("Tags", ($ObjectMeta.Tags))
                 $XmlObjectWriter.WriteElementString("Format", ($ObjectMeta.Format)) # Set format to One-Shot (for now...)

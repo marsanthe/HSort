@@ -911,7 +911,7 @@ $FoundObjectsHt = Get-Objects -SourceDir $PathsLibrary.Source
 $ToProcessLst = [List[object]]::new()
 $ToProcessLst = $FoundObjectsHt.ToProcess
 
-$SkippedObjects = @{} #< Why Global? 
+$SkippedObjects = @{} 
 $SkippedObjects = $FoundObjectsHt.SkippedObjects
 
 # Folders that contain at least one file 

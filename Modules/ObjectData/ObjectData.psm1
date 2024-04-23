@@ -51,7 +51,7 @@ function New-ObjectName {
 
     return $NewObName
 }
-function Read-Creator {
+function Select-Collection {
     <# 
     .OUTPUTS
     String
@@ -60,11 +60,11 @@ function Read-Creator {
     <# 
         Until I can come up with a better name...
 
-        Creator := $Convention for Doujinshi
+        Collection := $Convention for Doujinshi
 
-        Creator := $Artist for Manga
+        Collection := $Artist for Manga
 
-        Creator := "Anthology" for Anthologies
+        Collection := "Anthology" for Anthologies
         (And Artist:= "Anthology" as well...)
 
     #>    
@@ -75,20 +75,20 @@ function Read-Creator {
     )
 
     if ($ObjectNameArray[0] -eq "Anthology") {
-        $Creator = "Anthology"
+        $Collection = "Anthology"
     }
     
     elseif ($ObjectNameArray[0] -eq "Manga") {
-        $Creator = "$($ObjectNameArray[2])"
+        $Collection = "$($ObjectNameArray[2])"
     }
     
     elseif ($ObjectNameArray[0] -eq "Doujinshi") {
 
-        $Creator = "$($ObjectNameArray[1])"
+        $Collection = "$($ObjectNameArray[1])"
 
     }
 
-    return $Creator
+    return $Collection
 }
 
 function Convert-ListToString {
@@ -111,13 +111,85 @@ function Convert-ListToString {
     return $String
 } 
 
+function Read-TagsFromFile {
 
-function Find-Tags {
+    Param(
+        [Parameter(Mandatory)]
+        [string]$Path 
+    )
+
+    $TagsHt = @{}
+    $TagSet = [HashSet[string]]::new()
+
+    foreach ($line in [System.IO.File]::ReadLines($Path)) {
+        
+        if ($line -ne "" -and -not $line.StartsWith("#")) {
+
+            if ($line -match "^\[(?<Category>.+)\]") {
+
+                if ($TagSet.Count -gt 0) {
+                    $null = $TagsHt.Add($Category, $TagSet)
+                    $TagSet = [List[string]]::new()
+                }
+
+                $Category = $Matches.Category
+
+            }
+            elseif ($Line.StartsWith("%")) {
+
+                # The file has to end with any number of "%%%%"
+                $TagsHt.Add($Category, $TagSet)
+
+            }
+            else {
+                $null = $TagSet.Add(($line.Trim()))
+            }
+        }
+    }
+
+    #$TagsHt | Export-Clixml -Path "$($PathsLibrary.Logs)\TagsHt.xml" -Force
+
+    return $TagsHt
+}
+
+
+function Import-Tags {
+    <# 
+    .NOTES
+        $TagsHt is referenced by Select-Tags
+    #>
+
+    $ImportFlag = 0
+
+    if (Test-Path "$CallDirectory\Tags.txt") {
+        
+        $TagsHt = Read-TagsFromFile -Path "$CallDirectory\Tags.txt"
+        
+        # In case $TagsHt evals to $null
+        if (-not $TagsHt) {
+            $ImportFlag = 1
+        }
+    }
+    else {
+        $ImportFlag = 2
+    }
+
+    # If Tags.txt doesn't exist or TagsHt evals to $null (Read error)
+    if ($ImportFlag -gt 0) {
+
+        $TagSetMeta = [System.Collections.Generic.HashSet[String]] @("english", "eng", "japanese", "digital", "censored", "uncensored", "decensored", "full color")
+
+        $TagsHt = @{
+            "Meta" = $TagSetMeta
+        }
+    }
+
+    return $TagsHt
+}
+function Select-Tags {
     <#
     .DESCRIPTION
-        Select valid Tokens from Meta-Section of the object name.
-        Return string of comma seperated tags
-        to be stored in ObjectMeta.
+        Select valid Tokens from object name.
     #>
 
     Param(
@@ -128,6 +200,7 @@ function Find-Tags {
         [string]$Title,
 
         [hashtable]$TagsHt
+
 
     )
 
@@ -167,13 +240,13 @@ function Find-Tags {
     }
 
     if ($TagList.Count -gt 0) {
-        $MetaTags = Convert-ListToString -List $TagList
+        $TagsCSV = Convert-ListToString -List $TagList
     }
     else{
-        $MetaTags = ""
+        $TagsCSV = ""
     }
 
-    return $MetaTags
+    return $TagsCSV
 
 }
 
@@ -274,7 +347,7 @@ function Write-Properties {
             $NewExtension = $Ext
         }
 
-        if($SaveCopyFlag -eq 0){
+        if($SafeCopyFlag -eq 0){
 
             $SourceHash = (Get-FileHash -LiteralPath $Object.FullName -Algorithm MD5).hash
         }
@@ -287,7 +360,7 @@ function Write-Properties {
 
         $NewExtension = ""
 
-        if($SaveCopyFlag -eq 0){
+        if($SafeCopyFlag -eq 0){
             $SourceHash = (($Object | Get-ChildItem) | Measure-Object -Sum Length).sum
         }
         else{
@@ -379,4 +452,4 @@ function New-Selector {
     }
 }
 
-Export-ModuleMember -Function New-ObjectName,Read-Creator,Convert-ListToString,Find-Tags,Write-Meta,Write-Properties,New-Selector -Variable Name,Creator,String,MetaTags
+Export-ModuleMember -Function New-ObjectName,Select-Collection,Convert-ListToString,Import-Tags,Select-Tags,Write-Meta,Write-Properties,New-Selector -Variable Name,Collection,String,TagsCSV,TagsHt

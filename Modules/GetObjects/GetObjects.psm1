@@ -101,8 +101,12 @@ function Get-Objects{
     )
 
     $FoundObjectsHt = @{}
-    $SkippedObjectsHt = @{}
+    $SkippedObjects = @{
+        "WrongExtension" = @{};
+        "UnsupportedOrMixedContent" = @{};
+        "EmptyLeafNode" = @{}
 
+    }
     $ToProcessLst = [List[object]]::new()
 
     $VisitedNodes_HsStr = [HashSet[string]]::new()
@@ -150,8 +154,9 @@ function Get-Objects{
                         Reason = "WrongExtension";
                         Extension = "$LooseFileExtension"}
 
-                    $SkippedObjectsHt.Add("$($LooseFile.FullName)",$SkippedObjectProperties)
+                    $SkippedObjects.WrongExtension.Add("$($LooseFile.FullName)", $SkippedObjectProperties)
                 }
+
             }
         }
 
@@ -220,7 +225,7 @@ function Get-Objects{
                     Reason = "UnsupportedOrMixedContent";
                     Extension = "Folder"}
     
-                $SkippedObjectsHt.Add("$($LeafNode.FullName)",$SkippedObjectProperties)
+                $SkippedObjects.UnsupportedOrMixedContent.Add("$($LeafNode.FullName)", $SkippedObjectProperties)
             }
         }
         # Empty leaf-node
@@ -235,7 +240,7 @@ function Get-Objects{
                 Reason = "EmptyLeafNode";
                 Extension = "Folder"}
 
-            $SkippedObjectsHt.Add("$($LeafNode.FullName)",$SkippedObjectProperties)            
+            $SkippedObjects.EmptyLeafNode.Add("$($LeafNode.FullName)", $SkippedObjectProperties)            
         }
 
         $CurrentFileExtensions_Set.Clear()
@@ -246,7 +251,7 @@ function Get-Objects{
     $FoundObjectsHt.Add("BadFolderCounter", $BadFolderCounter)
     $FoundObjectsHt.Add("WrongExtensionCounter", $WrongExtensionCounter)
 
-    $FoundObjectsHt.Add("SkippedObjects",$SkippedObjectsHt)
+    $FoundObjectsHt.Add("SkippedObjects",$SkippedObjects)
     $FoundObjectsHt.Add("ToProcess",$ToProcessLst)
 
     $Graph.Clear()
@@ -254,4 +259,4 @@ function Get-Objects{
     return $FoundObjectsHt
 }
 
-Export-ModuleMember -Function New-Graph,Get-Objects -Variable FoundObjectsHt,SkippedObjectsHt,ToProcessLst,WrongExtensionCounter,BadFolderCounter
+Export-ModuleMember -Function New-Graph,Get-Objects -Variable FoundObjectsHt,SkippedObjects,ToProcessLst,WrongExtensionCounter,BadFolderCounter

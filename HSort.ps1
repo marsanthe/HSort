@@ -1,57 +1,91 @@
 using namespace System.Collections.Generic
 
-$CallDirectory = Get-Location
+<# 
+.NOTES
+    Accessed in ObjectData.psm1 for Tags.txt
+#>
+$global:CallDirectory = Get-Location
 
 Import-Module -Name "$CallDirectory\Modules\GetObjects\GetObjects.psm1"
 Import-Module -Name "$CallDirectory\Modules\CreateComicInfoXML\CreateComicInfoXML.psm1"
 Import-Module -Name "$CallDirectory\Modules\CreateLogFiles\CreateLogFiles.psm1"
 Import-Module -Name "$CallDirectory\Modules\InitializeScript\InitializeScript.psm1"
 Import-Module -Name "$CallDirectory\Modules\DiskSpace\DiskSpace.psm1"
+Import-Module -Name "$CallDirectory\Modules\ObjectData\ObjectData.psm1" 
 
 $ErrorActionPreference = "Stop"
 
 Clear-Host
 
-$global:Timestamp = Get-Date -Format "dd_MM_yyyy"
+$global:Timestamp = Get-Date -Format "hh_mm_ss_dd_MM_yyyy"
 
 ### Begin: Classes ###
 
-Class Counter {
+<# 
+Class ObjectCounter {
+
+    [int]$Manga
+    [int]$Doujinshi
+    [int]$Convention
+    [int]$Anthology
+
+    [int]$Title
+
+    EventCounter(){
+
+        $this.Manga = 0
+        $this.Doujinshi = 0
+        $this.Convention = 0
+        $this.Anthology = 0
+    }
+
+}
+#>
+
+Class EventCounter {
 
     <# 
         .SYNOPSIS
-        Counting instances.
+        Counting events.
     #>
 
     [int]$AllObjects
-    [int]$SortedObjects
+
+    [int]$ToSort
+
     [int]$Anthologies
     [int]$Artists
     [int]$Manga
     [int]$Conventions
     [int]$Doujinshi
-    [int]$Skipped
+
     [int]$Duplicates
     [int]$NoMatch
-    [int]$Matches
+    [int]$EFC # Excluded From Copying
+    [int]$Variants
+
+    [int]$ToCopy
+    [int]$CopyGood
     [int]$CopyErrors
-    [int]$NotProcessed
+    [int]$Skipped
 
     Counter() {
 
         $this.AllObjects = 0
-        $this.SortedObjects = 0
+        $this.ToSort = 0
         $this.Anthologies = 0
         $this.Artists = 0
         $this.Manga = 0
         $this.Conventions = 0
         $this.Doujinshi = 0
-        $this.Skipped = 0
+        $this.EFC = 0
+        $this.Variants = 0
         $this.Duplicates = 0
         $this.NoMatch = 0
-        $this.Matches = 0
+        $this.ToCopy = 0
         $this.CopyErrors = 0
-        $this.NotProcessed = 0
+        $this.Skipped = 0
+        $this.CopyGood = 0
     }
 
     [void]AddTitle([string]$PublishingType) {
@@ -84,36 +118,46 @@ Class Counter {
 
     [void]AddDuplicate(){
         $this.Duplicates += 1
-        $this.Skipped += 1
+        $this.EFC += 1
     }
 
     [void]AddNoMatch() {
-        $this.Skipped += 1
+        $this.EFC += 1
         $this.NoMatch += 1
     }
 
-    [void]AddSkipped(){
-        $this.Skipped += 1
+    [void]AddEFC(){
+        $this.EFC += 1
     }
 
-    [void]ComputeMatches(){
-        $this.Matches = ($this.AllObjects - $this.Skipped)
+    [void]ComputeToCopy(){
+        $this.ToCopy = ($this.AllObjects - $this.EFC)
+    }
+
+    [void]AddCopyGood(){
+        $this.CopyGood += 1
     }
 
     [void]AddCopyError(){
         $this.CopyErrors += 1
     }
 
-    [void]ComputeNotProcessed(){
-        $this.NotProcessed = $this.Skipped + $this.CopyErrors
+    [void]ComputeSkipped(){
+        $this.Skipped = $this.EFC + $this.CopyErrors
+    }
+
+    [void]AddVariant(){
+        $this.Variants += 1
     }
 }
 
 ### End: Classes ###
 
+
 #region
 
 ### Begin: Functions ###
+
 
 function Copy-ScriptOutput {
     <#
@@ -132,7 +176,6 @@ function Copy-ScriptOutput {
         [switch]$Delete
     )
 
-    $Timestamp = Get-Date -Format "dd_MM_yyyy HH_mm_ss"
     $CopyName = "$PSVersion $LibraryName $Timestamp"
     $TargetParent = "$HOME\Desktop"
     $Target = "$HOME\Desktop\HSortProgramFiles"
@@ -149,132 +192,20 @@ function Copy-ScriptOutput {
     }
 }
 
-function Read-Tokens {
+function Show-String {
 
-    Param(
+    param(
         [Parameter(Mandatory)]
-        [string]$Path 
+        # String array
+        [string[]]$StringArray
     )
 
-    $TokenTable = @{}
-    $TokenList = [List[string]]::new()
-
-    foreach ($line in [System.IO.File]::ReadLines($Path)) {
-        
-        if ($line -ne "" -and -not $line.StartsWith("#")) {
-
-            if ($line -match "^\[(?<Category>.+)\]") {
-
-                if ($TokenList.Count -gt 0) {
-                    $null = $TokenTable.Add($Category, $TokenList)
-                    $TokenList = [List[string]]::new()
-                }
-
-                $Category = $Matches.Category
-
-            }
-            elseif ($Line.StartsWith("%")) {
-
-                # The file has to end with any number of "%%%%"
-                $TokenTable.Add($Category, $TokenList)
-
-            }
-            else {
-                $null = $TokenList.Add($line)
-            }
-
-        }
-    
-    }
-    return $TokenTable
-}
-
-
-function Import-TokenSet {
-
-    Param(
-        [Parameter(Mandatory)]
-        [string]$Path
-    )
-
-    $TokenTable = Read-Tokens -Path $Path
-
-    $TokenSet = [HashSet[string]]::new()
-    
-    foreach ($Category in $TokenTable.Keys) {
-        foreach ($Token in $TokenTable.$Category) {
-            $null = $TokenSet.Add($Token)
-        }
-    }
-
-    return $TokenSet
-}
-
-function Get-TokenSet{
-
-    <# 
-        .NOTES
-        $TokenSet is referenced by Select-MetaTokens
-    #>
-
-    $TokenSetImportFlag = 0
-
-    if(Test-Path "$($PathsProgram.AppData)\Tokens.txt"){
-
-        $global:TokenSet = Import-TokenSet -Path "$($PathsProgram.AppData)\Tokens.txt"
-
-        # In case $TokenSet evals to $null
-        if(-not $TokenSet){
-            $TokenSetImportFlag = 1
-        }
-    }
-    else{
-        $TokenSetImportFlag = 2
-    }
-
-    # If Tokens.txt doesn't exist or TokenSet evals to $null
-    if ($TokenSetImportFlag -gt 0) {
-
-        $TokenArray = ("English", "Eng", "Japanese", "Digital", "Censored", "Uncensored", "Decensored", "Full color")
-
-        $global:TokenSet = [HashSet[string]]::new()
-
-        # Since PS 5.1 has no range()...
-        for ($i = 0; $i -le ($TokenArray.Length - 1); $i += 1 ) {
-            $null = $TokenSet.Add($TokenArray[$i])
-        }
+    for ($i = 0; $i -le ($StringArray.length - 1); $i++) {
+        Write-Information -MessageData $StringArray[$i] -InformationAction Continue
     }
 }
 
-function Add-NoCopy {
-    <#
-    .DESCRIPTION
-        Objects that caused errors in COPYING are stored in SkippedObjects.
-        The content of SkippedObjects is formatted and
-        written to SkippedObjects.txt in UserLibrary\Logs.
-    #>
-
-    Param(
-        [Parameter(Mandatory)]
-        [hashtable]$Object,
-
-        [Parameter(Mandatory)]
-        [string]$Reason
-    )
-
-    $SkippedObjectProperties = @{
-        ObjectParent = $Object.ObjectParent;
-        Path         = $Object.ObjectSource;
-        ObjectName   = $Object.ObjectName;
-        Reason       = $Reason;
-        Extension    = $Object.Extension
-    }
-
-    $null = $SkippedObjects.add("$($Object.ObjectSource)", $SkippedObjectProperties)
-
-}
-
-function Add-Skipped{
+function Add-Skipped {
     <#
     .DESCRIPTION
         Objects that were skipped during SORTING.
@@ -284,6 +215,10 @@ function Add-Skipped{
     #>
 
     Param(
+
+        [Parameter(Mandatory)]
+        [hashtable]$SkippedObjects,
+
         [Parameter(Mandatory)]
         [object]$Object,
 
@@ -302,87 +237,71 @@ function Add-Skipped{
         Extension    = $Extension
     }
 
-    $null = $SkippedObjects.add("$($Object.FullName)", $SkippedObjectProperties)
-
-}
-
-function Show-String {
-
-    param(
-        [Parameter(Mandatory)]
-        # String array
-        [string[]]$StringArray
-    )
-
-    for ($i = 0; $i -le ($StringArray.length - 1); $i++) {
-        Write-Information -MessageData $StringArray[$i] -InformationAction Continue
+    if ($SkippedObjects.ContainsKey($Reason)) {
+        $null = $SkippedObjects.$Reason.add("$($Object.FullName)", $SkippedObjectProperties)
     }
+    else {
+        $SkippedObjects[$Reason] = @{}
+        $null = $SkippedObjects.$Reason.add("$($Object.FullName)", $SkippedObjectProperties)
+    }
+    
+
 }
 
-function Select-MetaTokens {
+function Add-NoCopy {
     <#
     .DESCRIPTION
-        Select valid Tokens from Meta-Section of the object name.
-        Return string of comma seperated tags
-        to be stored in ObjectMeta.
+        Objects that caused errors in COPYING are stored in SkippedObjects.
+        The content of SkippedObjects is formatted and
+        written to  UserLibrary\Logs\SkippedObjects.txt.
     #>
 
     Param(
         [Parameter(Mandatory)]
-        [AllowEmptyString()]
-        [string]$MetaString
-    )
+        [hashtable]$SkippedObjects,
+    
+        [Parameter(Mandatory)]
+        [hashtable]$Object,
 
-    if ($MetaString -ne "") {
-        
-        # Array
-        $MetaTokens = $MetaString.Split(",")
+        [Parameter(Mandatory)]
+        [string]$Reason
+    )  
 
-        $ValidTokenString = ""
-
-        for($i = 0; $i -le ($MetaTokens.length -1); $i++){
-
-            # Remove all non-word characters.
-            # 02/04/2024 Use string-invariants
-            $Token = $MetaTokens[$i] -replace '[^a-zA-Z]', ''
-
-            if ($TokenSet.Contains($Token)) {
-
-                $ValidTokenString += $Token
-                $ValidTokenString += ","
-
-            }
-        }
-        $ValidTokenString = $ValidTokenString.Trim(',')
-    }
-    else {
-        $ValidTokenString = ""
+    $SkippedObjectProperties = @{
+        ObjectParent = $Object.ObjectParent;
+        Path         = $Object.ObjectSource;
+        ObjectName   = $Object.ObjectName;
+        Reason       = $Reason;
+        Extension    = $Object.Extension
     }
 
-    return ($ValidTokenString)
+    if($SkippedObjects.ContainsKey($Reason)){
+        $null = $SkippedObjects.$Reason.Add("$($Object.ObjectSource)", $SkippedObjectProperties)
+    }
+    else{
+        $SkippedObjects[$Reason] = @{}
+        $null = $SkippedObjects.$Reason.Add("$($Object.ObjectSource)", $SkippedObjectProperties)
+    }
 
 }
 
+function Format-ObjectName {
+    <#
+    .DESCRIPTION
+        Remove empty parenthesis/brackets.
+        The RegEx patterns used in SORTING result in false matches when
+        encountering empty parenthesis/brackets.
+    #>
 
-function Convert-TagsToString{
     Param(
         [Parameter(Mandatory)]
-        [List[String]]$TagList
+        [string]$ObjectNameNEX
     )
 
-    $String = ""                                
- 
-    for($i = 0; $i -le ($List.Count -1); $i++){
-        if($i -le ($List.Count -2)){
-            $String += "$($List[$i]),"
-        }
-        else{
-            $String += "$($List[$i])"
-        }
-    }
+    $Normalized = ((($ObjectNameNEX -replace '\( *\)', '') -replace '\{ *\}', '') -replace '\[ *\]', '')
 
-    return $String
-} 
+    return $Normalized
+}
 
 function Edit-ObjectNameArray {
 
@@ -412,6 +331,8 @@ function Edit-ObjectNameArray {
             # If token is Meta.
             if ($i -eq 4) {
 
+                # Remove double extensions,
+                # example: "File.zip.cbz"
                 $Token = $Token.trim('.zip')
                 $Token = $Token.trim('.rar')
                 $Token = $Token.trim('.cbz')
@@ -432,57 +353,182 @@ function Edit-ObjectNameArray {
     }
 }
 
-function New-ObjectName {
-    <#
-    .INPUTS
-        Array of sanitized and normalized tokens.
-    .OUTPUTS
-        NewObjectName as String
-        The file name of any object stored in Library.
-    .DESCRIPTION
-        Put everything except the title in parenthesis.
-    .PARAMETER
+function Add-TitleToLibrary {
+    <# 
+    .NOTES
+        The title is only a PART of the object name.
+        Rename NewName to something like: ReFoName (re-formatted name)
     #>
+    
+    Param(
+        [Parameter(Mandatory)]
+        [hashtable]$UserLibrary,
+
+        [Parameter(Mandatory)]
+        [array]$ObjectNameArray,
+
+        [Parameter(Mandatory)]
+        [Object]$Object,
+
+        [Parameter(Mandatory)]
+        [string]$NewName
+    )
+
+    $PublishingType = $ObjectNameArray[0]
+    $Convention = $ObjectNameArray[1]
+    $Artist = $ObjectNameArray[2]
+    $Title = $ObjectNameArray[3]                        
+
+    
+    if ($PublishingType -eq "Manga") {
+
+        $UserLibrary.$Artist[$Title] = @{
+
+            "VariantList" = [List[string]]::new();
+
+            $NewName      = @{
+                ObjectSource    = $Object.FullName;
+                ObjectLocation  = "$($PathsLibrary.Artists)\$Artist";
+                FirstDiscovered = $Timestamp
+            }
+
+        }
+
+        # Add Base Variant
+        $null = $UserLibrary.$Artist.$Title.VariantList.add($NewName)
+    }
+
+    elseif ($PublishingType -eq "Doujinshi") {
+
+        $UserLibrary.$Convention[$Title] = @{
+
+            "VariantList" = [List[string]]::new();
+
+            $NewName      = @{
+                ObjectSource    = $Object.FullName;
+                ObjectLocation  = "$($PathsLibrary.Conventions)\$Convention";
+                FirstDiscovered = $Timestamp;
+            }
+
+        }  
+
+        $null = $UserLibrary.$Convention.$Title.VariantList.add($NewName)
+    }
+
+    elseif ($PublishingType -eq "Anthology") {
+
+        $UserLibrary.Anthology[$Title] = @{
+
+            "VariantList" = [List[string]]::new();
+
+            $NewName      = @{
+                ObjectSource    = $Object.FullName;
+                ObjectLocation  = "$($PathsLibrary.Anthologies)\$Artist";
+                FirstDiscovered = $Timestamp;
+            }
+
+        }
+
+        $null = $UserLibrary.Anthology.$Title.VariantList.add($NewName)
+    }
+}
+
+function New-VariantNameArray {
 
     Param(
         [Parameter(Mandatory)]
-        [array]$ObjectNameArray
+        [array]$NameArray,
+
+        [Parameter(Mandatory)]
+        [array]$VariantNameArray
     )
 
-    $Name = ""
+    # Read from $NameArray 
+    $PublishingType = $NameArray[0]; $Convention = $NameArray[1]; $Artist = $NameArray[2]; $Title = $NameArray[3]
 
-    for ($i = 1; $i -le ($ObjectNameArray.length - 1); $i += 1) {
+    switch ($PublishingType) {
 
-        $Token = $ObjectNameArray[$i]
+        "Manga" { $VariantNumber = ($UserLibrary.$Artist.$Title.VariantList.Count) - 1; Break }
 
-        if ($Token -ne "") {
+        "Doujinshi" { $VariantNumber = ($UserLibrary.$Convention.$Title.VariantList.Count) - 1; Break }
 
-            if ($i -eq 1) {
-                $Token = "($Token)"
-            }
-            # If token is Artist
-            elseif ($i -eq 2) {
-                $Token = "($Token)"
-            }
-            elseif($i -eq 4){
-                $Token = "($Token)"
-            }
+        "Anthology" { $VariantNumber = ($UserLibrary.Anthology.$Title.VariantList.Count) - 1; Break }
+        
+    }
 
+    $VariantTitle = "$Title Variant $VariantNumber"
+
+    # Copy Values from NameArray to VariantNameArray, but replace title with variant title
+    for ($i = 0; $i -le ($NameArray.length - 1); $i ++) {
+
+        # If Title, replace with $VariantTitle
+        if ($i -eq 3) {
+            $VariantNameArray[$i] = $VariantTitle
         }
-
-        if ($Name -eq "") {
-            $Name += $Token
-        }
-
-        # Add spce between Tokens
+        # Else copy from $NameArray
         else {
-            $Name += " $Token"
+            $VariantNameArray[$i] = $NameArray[$i] 
         }
     }
 
-    $Name = $Name.trim()
+}
 
-    return $Name
+function Add-VariantToLibrary {
+
+    Param(
+        [Parameter(Mandatory)]
+        [hashtable]$UserLibrary,
+
+        [Parameter(Mandatory)]
+        [array]$ObjectNameArray,
+
+        [Parameter(Mandatory)]
+        [AllowEmptyString()]
+        [string]$NewExtension,
+
+        [Parameter(Mandatory)]
+        [string]$NewName,
+
+        [Parameter(Mandatory)]
+        [string]$VariantName
+    )
+
+    $PublishingType = $ObjectNameArray[0]
+    $Convention = $ObjectNameArray[1]
+    $Artist = $ObjectNameArray[2]
+    $Title = $ObjectNameArray[3]
+
+    if ($PublishingType -eq "Manga") {
+
+        $UserLibrary.$Artist.$Title[$VariantName] = @{
+            ObjectSource    = $Object.FullName;
+            ObjectLocation  = "$($PathsLibrary.Artists)\$Artist\$VariantName$NewExtension";
+            FirstDiscovered = $Timestamp
+        }
+
+        # Add $NewObjectName - not $VariantObjectName
+        $null = $UserLibrary.$Artist.$Title.VariantList.add($NewName)
+    }
+    elseif ($PublishingType -eq "Doujinshi") {
+
+        $UserLibrary.$Convention.$Title[$VariantName] = @{
+            ObjectSource    = $Object.FullName;
+            ObjectLocation  = "$($PathsLibrary.Conventions)\$Convention\$VariantName$NewExtension";
+            FirstDiscovered = $Timestamp # change timestamp format here to yyyy-MM-dd
+        }
+        
+        $null = $UserLibrary.$Convention.$Title.VariantList.add($NewName)
+    }
+    elseif ($PublishingType -eq "Anthology") {
+
+        $UserLibrary.$Artist.$Title[$VariantName] = @{
+            ObjectSource    = $Object.FullName;
+            ObjectLocation  = "$PathsLibrary.Anthologies\$VariantName$NewExtension";
+            FirstDiscovered = $Timestamp
+        }
+
+        $null = $UserLibrary.$Artist.$Title.VariantList.add($NewName)
+    }
 }
 
 function Add-Duplicate{
@@ -515,349 +561,11 @@ function Add-Duplicate{
     }
 }
 
-function Format-ObjectName{
-    <#
-    .DESCRIPTION
-        Remove empty parenthesis/brackets.
-        The RegEx patterns used in SORTING result in false matches when
-        encountering empty parenthesis/brackets.
-    #>
-
-    Param(
-        [Parameter(Mandatory)]
-        [string]$ObjectNameNEX
-    )
-
-    $Normalized = ((($ObjectNameNEX -replace '\( *\)', '') -replace '\{ *\}', '') -replace '\[ *\]', '')
-
-    return $Normalized
-}
-
-function Write-Meta{
-    <# 
-    .NOTES
-        16/04/2024
-        Kavita 0.8 changed how collections work.
-
-    #>    
-
-    Param(
-        [Parameter(Mandatory)]
-        [array]$ObjectNameArray,
-
-        [Parameter(Mandatory)]
-        [AllowEmptyString()]
-        [string]$ValidTokens,
-
-        [Parameter(Mandatory)]
-        [string]$CreationDate
-    )
-
-    $PublishingType = $ObjectNameArray[0]
-
-    # Empty string if Object is not Doujinshi.
-    $Convention     = $ObjectNameArray[1]
-
-    # Artist is "Anthology" for Anthologies.
-    $Artist         = $ObjectNameArray[2]
-    $Title          = $ObjectNameArray[3]
-
-    $DateArray = $CreationDate.split("-")
-    $yyyy      = $DateArray[0]
-    $MM        = $DateArray[1]
-
-    switch($PublishingType)
-    {
-
-        "Manga" { $ObjectTarget = "$($PathsLibrary.Artists)\$Artist"; $SeriesGroup = $Artist; Break}
-
-        "Doujinshi" { $ObjectTarget = "$($PathsLibrary.Conventions)\$Convention"; $SeriesGroup = $Convention; Break }
-
-        "Anthology" { $ObjectTarget = $PathsLibrary.Anthologies; $SeriesGroup = $Artist; Break }
-        
-    }
-
-    if(! $ValidTokens -eq ""){
-
-        $Tags = "$PublishingType,$yyyy,$MM,$ValidTokens"
-    }
-    else{
-        $Tags = "$PublishingType,$yyyy,$MM"
-    }
-
-    return @{
-        PublishingType = $PublishingType;
-        Format         = "Special";
-        Convention     = $Convention;
-        Artist         = $Artist;
-        SeriesGroup    = $SeriesGroup;
-        Series         = $Title;
-        Title          = $Title;
-        Tags           = $Tags;
-        ObjectTarget   = $ObjectTarget
-    }
-
-}
-
-function Add-TitleToLibrary{
-    <# 
-        .NOTES
-        The title is only a PART of the object name.
-        Rename NewName to something like: ReFoName (re-formatted name)
-    #>
-    
-    Param(
-        [Parameter(Mandatory)]
-        [hashtable]$LibraryContent,
-
-        [Parameter(Mandatory)]
-        [array]$ObjectNameArray,
-
-        [Parameter(Mandatory)]
-        [Object]$Object,
-
-        [Parameter(Mandatory)]
-        [string]$NewName
-    )
-
-    $PublishingType = $ObjectNameArray[0]
-    $Convention     = $ObjectNameArray[1]
-    $Artist         = $ObjectNameArray[2]
-    $Title          = $ObjectNameArray[3]                        
-
-    
-    if($PublishingType -eq "Manga"){
-
-        $LibraryContent.$Artist[$Title] = @{
-            "VariantList" = [List[string]]::new();
-            $NewName = @{
-                ObjectSource    = $Object.FullName;
-                ObjectLocation  = "$($PathsLibrary.Artists)\$Artist";
-                FirstDiscovered = $Timestamp 
-            }
-        }
-
-        # Add Base Variant
-        $null = $LibraryContent.$Artist.$Title.VariantList.add($NewName)
-    }
-
-    elseif($PublishingType -eq "Doujinshi"){
-
-        $LibraryContent.$Convention[$Title] = @{
-            "VariantList" = [List[string]]::new();
-            $NewName = @{
-                ObjectSource    = $Object.FullName;
-                ObjectLocation  = "$($PathsLibrary.Conventions)\$Convention";
-                FirstDiscovered = $Timestamp;
-            }
-        }  
-
-        $null = $LibraryContent.$Convention.$Title.VariantList.add($NewName)
-    }
-
-    elseif($PublishingType -eq "Anthology"){
-
-        $LibraryContent.Anthology[$Title] = @{
-            "VariantList" = [List[string]]::new();
-           $NewName = @{
-                ObjectSource    = $Object.FullName;
-                ObjectLocation  = "$($PathsLibrary.Anthologies)\$Artist";
-                FirstDiscovered = $Timestamp;
-            }
-        }
-
-        $null = $LibraryContent.Anthology.$Title.VariantList.add($NewName)
-    }
-}
-
-function Add-VariantToLibrary{
-
-    Param(
-        [Parameter(Mandatory)]
-        [hashtable]$LibraryContent,
-
-        [Parameter(Mandatory)]
-        [array]$ObjectNameArray,
-
-        [Parameter(Mandatory)]
-        [AllowEmptyString()]
-        [string]$NewExtension,
-
-        [Parameter(Mandatory)]
-        [string]$NewName,
-
-        [Parameter(Mandatory)]
-        [string]$VariantName
-    )
-
-    $PublishingType = $ObjectNameArray[0]
-    $Convention     = $ObjectNameArray[1]
-    $Artist         = $ObjectNameArray[2]
-    $Title          = $ObjectNameArray[3]
-
-    if($PublishingType -eq "Manga"){
-
-        $LibraryContent.$Artist.$Title[$VariantName] = @{
-            ObjectSource    = $Object.FullName;
-            ObjectLocation  = "$($PathsLibrary.Artists)\$Artist\$VariantName$NewExtension";
-            FirstDiscovered = $Timestamp
-        }
-
-        # Add $NewObjectName - not $VariantObjectName
-        $null = $LibraryContent.$Artist.$Title.VariantList.add($NewName)
-    }
-    elseif($PublishingType -eq "Doujinshi"){
-
-        $LibraryContent.$Convention.$Title[$VariantName] = @{
-            ObjectSource    = $Object.FullName;
-            ObjectLocation  = "$($PathsLibrary.Conventions)\$Convention\$VariantName$NewExtension";
-            FirstDiscovered = $Timestamp # change timestamp format here to yyyy-MM-dd
-        }
-        
-        $null = $LibraryContent.$Convention.$Title.VariantList.add($NewName)
-    }
-    elseif($PublishingType -eq "Anthology"){
-
-        $LibraryContent.$Artist.$Title[$VariantName] = @{
-            ObjectSource    = $Object.FullName;
-            ObjectLocation  = "$PathsLibrary.Anthologies\$VariantName$NewExtension";
-            FirstDiscovered = $Timestamp
-        }
-
-        $null = $LibraryContent.$Artist.$Title.VariantList.add($NewName)
-    }
-}
-
-
-function Write-Properties{
-
-    Param(
-        [Parameter(Mandatory)]
-        [Object]$Object,
-
-        [Parameter(Mandatory)]
-        [string]$NewName,
-
-        [Parameter(Mandatory)]
-        [array]$NameArray,
-
-        [Parameter(Mandatory)]
-        [string]$NameNEX,
-
-        [Parameter(Mandatory)]
-        [string]$Ext
-    )
-
-    if (!($Ext -eq "Folder")) {
-
-        # Kavita doesn't read ComicInfo.xml files from 7z archives.
-        if ($Extension -eq '.zip') {
-            $NewExtension = '.cbz'
-        }
-        elseif ($Extension -eq '.rar') {
-            $NewExtension = '.cbr'
-        }
-        else {
-            $NewExtension = $Extension
-        }
-
-        $SourceHash = (Get-FileHash -LiteralPath $Object.FullName -Algorithm MD5).hash
-
-    }
-    else {
-        $NewExtension  = ""
-        $SourceHash = (($Object | Get-ChildItem) | Measure-Object -Sum Length).sum
-    }
-
-    $PublishingType = $NameArray[0]
-    $Convention     = $NameArray[1]
-    $Artist         = $NameArray[2]
-
-    if($PublishingType -eq "Anthology"){
-
-        $ObjectTarget = "$($PathsLibrary.Anthologies)\$Artist"
-
-    }
-    elseif($PublishingType -eq "Manga"){
-
-        $ObjectTarget = "$($PathsLibrary.Artists)\$Artist"
-
-    }
-    elseif($PublishingType -eq "Doujinshi"){
-
-        $ObjectTarget = "$($PathsLibrary.Conventions)\$Convention"
-
-    }
-
-    return @{
-        ObjectSource  = ($Object.FullName);
-        ObjectNewName = $NewName;
-        ObjectName    = $Object.Name;
-        ObjectNameNEX = $NameNEX;
-        Extension     = $Ext;
-        NewExtension  = $NewExtension;
-        ObjectTarget  = $ObjectTarget;
-        ObjectParent  = (Split-Path -Parent $Object.FullName);
-        SourceHash    = $SourceHash;
-        TargetHash    = $Null
-    }
-
-}
-
-function New-Selector{
-    <# 
-    .DESCRIPTION
-    Allows to remove a Title from the Library
-    in COPY, if copying fails
-
-    .OUTPUTS
-    Hashtable that allows to access a title in Library
-    #>
-
-    Param(
-        [Parameter(Mandatory)]
-        [array]$NameArray,
-
-        [Parameter(Mandatory)]
-        [string]$NewName,
-
-        [string]$VariantName
-    )
-
-    begin{
-
-        if($PSBoundParameters.ContainsKey('VariantName')){
-            $VariantObjectName = $VariantName
-        }
-        else{
-            $VariantObjectName = ""
-        }
-    }
-
-    process{
-
-        $PublishingType = $NameArray[0]
-        $Convention     = $NameArray[1]
-        $Artist         = $NameArray[2]
-        $Title          = $NameArray[3]
-        
-        return @{
-            "PublishingType" = $PublishingType
-            "Artist" = $Artist
-            "Convention" = $Convention
-            "Title" = $Title
-            "VariantObjectName" = $VariantObjectName
-            "NewName" = $NewName
-        }
-
-    }
-}
-
 function Remove-FromLibrary{
 
     Param(
         [Parameter(Mandatory)]
-        [hashtable]$LibraryContent,
+        [hashtable]$UserLibrary,
 
         [Parameter(Mandatory)]
         [hashtable]$ObjectSelector
@@ -874,103 +582,52 @@ function Remove-FromLibrary{
     if($PublishingType -eq "Anthology"){
 
         if($VariantName -ne ""){
-            $LibraryContent.$Artist.$Title.remove($VariantName)
+            $UserLibrary.$Artist.$Title.remove($VariantName)
         }
         else{
-            $LibraryContent.$Artist.$Title.remove($NewName)
+            $UserLibrary.$Artist.$Title.remove($NewName)
         }
     }
     elseif($PublishingType -eq "Manga"){
 
         if($VariantName -ne ""){
-            $LibraryContent.$Artist.$Title.remove($VariantName)
+            $UserLibrary.$Artist.$Title.remove($VariantName)
         }
         else{
-            $LibraryContent.$Artist.$Title.remove($NewName)
+            $UserLibrary.$Artist.$Title.remove($NewName)
         }
     }
     elseif($PublishingType -eq "Doujinshi"){
         
         if($VariantName -ne ""){
-            $LibraryContent.$Convention.$Title.remove($VariantName)
+            $UserLibrary.$Convention.$Title.remove($VariantName)
         }
         else{
-            $LibraryContent.$Convention.$Title.remove($NewName)
+            $UserLibrary.$Convention.$Title.remove($NewName)
         }
     }
 }
 
-function New-VariantNameArray{
-
-    Param(
-        [Parameter(Mandatory)]
-        [array]$NameArray,
-
-        [Parameter(Mandatory)]
-        [array]$VariantNameArray
-    )
-
-    $PublishingType = $ObjectNameArray[0]
-    $Convention = $ObjectNameArray[1]
-    $Artist = $ObjectNameArray[2]
-    $Title = $ObjectNameArray[3]
-    $Meta = $ObjectNameArray[4]
-
-    switch ($PublishingType) {
-
-        "Manga" { $VariantNumber = ($LibraryContent.$Artist.$Title.VariantList.Count) - 1; Break }
-
-        "Doujinshi" { $VariantNumber = ($LibraryContent.$Convention.$Title.VariantList.Count) - 1; Break }
-
-        "Anthology" { $VariantNumber = ($LibraryContent.Anthology.$Title.VariantList.Count) - 1; Break }
-        
-    }
-
-    $Title += " Variant $VariantNumber"
-
-    $VariantNameArray[0] = $PublishingType
-    $VariantNameArray[1] = $Convention
-    $VariantNameArray[2] = $Artist
-    $VariantNameArray[3] = $Title
-    $VariantNameArray[4] = $Meta
-
-}
-
-
-function Read-Creator{
-
+function Remove-ComicInfo{
     <# 
-        Until I can come up with a better name...
-
-        Creator := $Convention for Doujinshi
-
-        Creator := $Artist for Manga
-
-        Creator := "Anthology" for Anthologies
-        (And Artist:= "Anthology" as well...)
-
-    #>    
-
+    .DESCRIPTION
+        Removes a ComicInfo-file from .\Library\ComicInfoFiles
+        if the object fails to  copy.
+    #>
     Param(
         [Parameter(Mandatory)]
-        [array]$ObjectNameArray
+        [hashtable]$ObjectSelector
     )
 
-    if($ObjectNameArray[0] -eq "Anthology"){
-        $Creator = "Anthology"
-    }
-    
-    elseif($ObjectNameArray[0] -eq "Manga"){
-        $Creator = "$($ObjectNameArray[2])"
-    }
-    
-    elseif($ObjectNameArray[0] -eq "Doujinshi"){
+    $VariantName = $ObjectSelector.VariantObjectName
+    $NewName = "$($ObjectSelector.NewName)"
 
-        $Creator = "$($ObjectNameArray[1])"
-
+    if($VariantName -ne ""){
+        Remove-Item -LiteralPath "$($PathsLibrary.ComicInfoFiles)\$VariantName" -Recurse -Force
     }
-
-    return $Creator
+    else{
+        Remove-Item -LiteralPath "$($PathsLibrary.ComicInfoFiles)\$NewName" -Recurse -Force
+    }
 }
 
 function Export-AsCSV {
@@ -992,50 +649,10 @@ function Export-AsCSV {
         "$Number,$($TimeTable.$Number)" | Out-File -FilePath "$($PathsLibrary.Logs)\TimeTable$Type $Timestamp.csv" -Encoding unicode -Append -Force
     }
 }
-
-function Remove-ComicInfo{
-    <# 
-    .DESCRIPTION
-    Removes a ComicInfo-file from .\Library\ComicInfoFiles
-    if the object fails to  copy.
-    #>
-    Param(
-        [Parameter(Mandatory)]
-        [hashtable]$ObjectSelector
-    )
-
-    $VariantName = $ObjectSelector.VariantObjectName
-    $NewName = "$($ObjectSelector.NewName)"
-
-    if($VariantName -ne ""){
-        Remove-Item -LiteralPath "$($PathsLibrary.ComicInfoFiles)\$VariantName" -Recurse -Force
-    }
-    else{
-        Remove-Item -LiteralPath "$($PathsLibrary.ComicInfoFiles)\$NewName" -Recurse -Force
-    }
-}
-
-<# 
-    function Select-TitleTags{
-        Param(
-            [Parameter(Mandatory)]
-            [string]$Title
-        )
-        $Inseki = [System.Collections.Generic.HashSet[String]] @("Sister", "Onee", "Onee-chan", "Imouto","Brother")
-        $TitleTokens = [System.Collections.Generic.HashSet[String]] @(($Title.Split(" ")))
-
-        if($TitleTokens.Overlaps($Inseki)){
-
-        }
-    }
-#>
-
-### End: Functions ###
-
 #endregion
 
 
-
+### Begin: Main ###
 
 Show-String -StringArray (" _ _ _     _                      _          _____ _____         _   ",
     "| | | |___| |___ ___ _____ ___   | |_ ___   |  |  |   __|___ ___| |_ ",
@@ -1043,31 +660,20 @@ Show-String -StringArray (" _ _ _     _                      _          _____ __
     "|_____|___|_|___|___|_|_|_|___|  |_| |___|  |__|__|_____|___|_| |_|  `n",
     "=====================================================================",
     " ",
-    " ")
-
-
-# trap {
-#     Copy-ScriptOutput -LibraryName $SettingsHt.LibraryName -PSVersion $PSVersion -Delete
-# }
-
-
+" ")
 
 
 ### Begin: Setup ###
 
-$ScriptVersion = "V004"
-
-$7zip = "$env:ProgramFiles\7-Zip\7z.exe"
+$ScriptVersion = "V0.1"
 
 $RuntimeStopwatch = New-Object -TypeName 'System.Diagnostics.Stopwatch'
-
 $SortingStopwatch = New-Object -TypeName 'System.Diagnostics.Stopwatch'
-
 $CopyingStopwatch = New-Object -TypeName 'System.Diagnostics.Stopwatch'
 
 $RuntimeStopwatch.Start()
 
-# Assert that PSVersion >= 5.1
+### Begin: Assert-PSVersion >= 5.1 ###
 $VersionMajor = $PSVersionTable.PSVersion.Major
 $VersionMinor = $PSVersionTable.PSVersion.Minor
 $PSVersion = "$VersionMajor.$VersionMinor"
@@ -1080,7 +686,58 @@ elseif (($VersionMajor -eq 5) -and ($VersionMinor -lt 1)) {
     Write-Output "This script requires at least Powershell Version 5.1`nExiting Script."
     exit
 }
+### End: Assert-PSVersion >= 5.1 ###
 
+
+### Begin: Assert-7ZipInstalled ###
+$64BitPath = "SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*"
+$32BitPath = "SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*"
+
+$App64Found = $False
+$App32Found = $False
+
+if([System.Environment]::Is64BitOperatingSystem){
+    $64BitApps = Get-ItemProperty "HKLM:\$64BitPath"
+    foreach($App in $64BitApps){
+        if($App.Publisher -eq "Igor Pavlov"){
+            $SevenZip64 = $App
+            $App64Found = $True
+        }
+    }
+    if($App64Found -eq $False){
+        $32BitApps = Get-ItemProperty "HKLM:\$32BitPath"
+        foreach($App in $32BitApps){
+            if($App.Publisher -eq "Igor Pavlov"){
+                $SevenZip32 = $App
+                $App32Found = $True
+            }
+        }      
+    }
+}
+else{
+    $32BitApps = Get-ItemProperty "HKLM:\$32BitPath"
+    foreach($App in $32BitApps){
+        if($App.Publisher -eq "Igor Pavlov"){
+            $SevenZip32 = $App
+            $App32Found = $True
+        }
+    }        
+}
+
+if($App64Found -eq $true){
+    $SevenZipPath = $SevenZip64.InstallLocation
+}
+elseif($App32Found -eq $true){
+    $SevenZipPath = $SevenZip32.InstallLocation
+}
+else{
+    Write-Information -MessageData "7-Zip not found. Exiting" -InformationAction Continue
+    exit
+}
+### End: Assert-7ZipInstalled ###
+
+
+$7zip = "$SevenZipPath\7z.exe"
 ### End: Setup ###
 
 
@@ -1151,14 +808,14 @@ else {
 
 ### Begin: Paths-LibraryFolder ###
 
-$script:PathsLibrary = [ordered]@{
+$global:PathsLibrary = [ordered]@{
 
     "Parent"         = "$($SettingsHt.Target)";
     "Base"           = "$($SettingsHt.Target)\$($SettingsHt.LibraryName)";
 
     "Library"        = "$($SettingsHt.Target)\$($SettingsHt.LibraryName)\$($SettingsHt.LibraryName)";
 
-    "Source"      = $SettingsHt.Source;
+    "Source"         = $SettingsHt.Source;
 
     "Artists"        = "$($SettingsHt.Target)\$($SettingsHt.LibraryName)\$($SettingsHt.LibraryName)\Artists";
     "Conventions"    = "$($SettingsHt.Target)\$($SettingsHt.LibraryName)\$($SettingsHt.LibraryName)\Conventions";
@@ -1186,8 +843,8 @@ if (($InitializeScript_ExitCode -eq 0) -or ($InitializeScript_ExitCode -eq -1)) 
         }
     }
 
-    # LibraryContentXML to serialize
-    $LibraryContent = @{}
+    # UserLibraryXML to serialize
+    $UserLibrary = @{}
 
     # Hashtable containing all visited objects (by object path).
     # Checked against ToProcessList.
@@ -1199,7 +856,7 @@ if (($InitializeScript_ExitCode -eq 0) -or ($InitializeScript_ExitCode -eq -1)) 
 # If Library(Name) is in SettingsArchive and ParentDirectory of Library is unchanged.
 elseif($InitializeScript_ExitCode -eq -2) {
 
-    $LibraryContent = Import-Clixml -Path "$($PathsProgram.Libs)\LibraryContent $($SettingsHt.LibraryName).xml"
+    $UserLibrary = Import-Clixml -Path "$($PathsProgram.Libs)\UserLibrary $($SettingsHt.LibraryName).xml"
 
     try {
         $VisitedObjects = Import-Clixml -Path "$($PathsProgram.AppData)\VisitedObjects $($SettingsHt.LibraryName).xml"
@@ -1217,6 +874,29 @@ elseif($InitializeScript_ExitCode -eq -2) {
     }
 }
 
+<#
+.NOTES
+    Accessed in ObjectData.psm1
+    for Get-FileHash
+.DESCRIPTION
+    SafeCopyFlag = 0
+    Calculate and compare Source and Target hash of Files
+    or Source and Target size for Folders
+
+    SafeCopyFlag = 1
+    Don't calculate file-hash/folder-size, instead set them to 0
+    so that a comparison always evaluates to true.
+.SOURCE
+    GetObjects.psm1
+#>
+
+if($SettingsHt.SafeCopy -eq "False"){
+    $Global:SafeCopyFlag = 1
+}
+else{
+    $Global:SafeCopyFlag = 0
+}
+
 ### End:  OnInitialization ###
 
 
@@ -1225,26 +905,25 @@ elseif($InitializeScript_ExitCode -eq -2) {
 
 New-Graph -SourceDir $PathsLibrary.Source
 
-# Hashtable containing all skipped objects.
 $FoundObjectsHt = @{}
 $FoundObjectsHt = Get-Objects -SourceDir $PathsLibrary.Source
 
 $ToProcessLst = [List[object]]::new()
 $ToProcessLst = $FoundObjectsHt.ToProcess
 
-$global:SkippedObjects = @{}
+$SkippedObjects = @{} #< Why Global? 
 $SkippedObjects = $FoundObjectsHt.SkippedObjects
 
-# Folders that contain at least one file with an unsupported extension.
+# Folders that contain at least one file 
+# with an unsupported extension.
 $BadFolderCounter = $FoundObjectsHt.BadFolderCounter
 
 $WrongExtensionCounter = $FoundObjectsHt.WrongExtensionCounter
 
-$Counter = [Counter]::New()
-
-$Counter.Skipped = ($BadFolderCounter + $WrongExtensionCounter)
-
-$Counter.AllObjects = ($ToProcessLst.Count + $BadFolderCounter + $WrongExtensionCounter)
+$EventCounter = [EventCounter]::New()
+$EventCounter.ToSort = ($ToProcessLst.Count)
+$EventCounter.EFC = ($BadFolderCounter + $WrongExtensionCounter)
+$EventCounter.AllObjects = ($ToProcessLst.Count + $BadFolderCounter + $WrongExtensionCounter)
 
 ### End: GetObjects ###
 
@@ -1258,14 +937,18 @@ Show-String -StringArray (" ",
 
 $SortingStopwatch.Start()
 
-# Create hashtable with <$Object.Name> = <$ObjectProperties>"
-# $ObjectProperties are defined in SORTING.
-# $ObjectProperties allows us to copy and therefore sort the objects to the correct folders.
+<# 
+    .DESCRIPTION
+    The hashtable that is used in COPYING to copy
+    objects to their proper destination.
+
+    Structure
+    <$Object.Name> = <$ObjectProperties>
+#>
 $ToCopy = @{}
 
-# Allows to remove an Object from LibraryContent in COPYING
-# in case the Object fails to copy.
-# Allows to access LibraryContent-Hashtable from to ToCopy.
+# Allows to access UserLibrary-Hashtable from to ToCopy, and therefore
+# to remove an Object from UserLibrary in COPYING if it fails to copy.
 $LibraryLookUp = @{}
 
 # For the progress bar. Incremented, when object is in ToProcessLst
@@ -1276,8 +959,7 @@ $SortingProgress = 0
 # Becomes the Value of each Key added to VisitedObjects, but has no real function.
 $SortedObjectsCounter = 0
 
-# Get custom tokens, if Tokens.txt exists in AppData
-Get-TokenSet
+$TagsHt = Import-Tags #< Get custom tags, if Tags.txt exists in HSort
 
 foreach ($Object in $ToProcessLst) {
     
@@ -1288,6 +970,8 @@ foreach ($Object in $ToProcessLst) {
     $ObjectName = $Object.Name
     $ObjectPath = $Object.FullName
     $IsFile     = ($Object -is [system.io.fileinfo])
+
+    Write-Information -MessageData "[Sorting]$ObjectName" -InformationAction Continue
 
     if ($IsFile) {
 
@@ -1333,74 +1017,74 @@ foreach ($Object in $ToProcessLst) {
         # NoMatch
         else {
             $NoMatchFlag = 1
-            $Counter.AddNoMatch()
-            Add-Skipped -Object $Object -Reason "NoMatch" -Extension $Extension
+            $EventCounter.AddNoMatch()
+            Add-Skipped -SkippedObjects $SkippedObjects -Object $Object -Reason "NoMatch" -Extension $Extension
         }
 
         if($NoMatchFlag -eq 0){
 
             Edit-ObjectNameArray -ObjectNameArray $ObjectNameArray
-            
-            $PublishingType = $ObjectNameArray[0]; $Convention = $ObjectNameArray[1]; $Artist = $ObjectNameArray[2]; $Title = $ObjectNameArray[3]; $Meta = $ObjectNameArray[4]
 
-            $Creator = Read-Creator -ObjectNameArray $ObjectNameArray
-    
-            $ValidTokens = Select-MetaTokens -MetaString $Meta
+            $PublishingType = $ObjectNameArray[0]; $Convention = $ObjectNameArray[1]; $Artist = $ObjectNameArray[2]; $Title = $ObjectNameArray[3]; $MetaToken = $ObjectNameArray[4]
+
+            $Collection = Select-Collection -ObjectNameArray $ObjectNameArray
+
+            # Import-Tags moved up. Import tags only once!
             
+            $TagsCSV = Select-Tags -MetaTokenString $MetaToken -Title $Title -TagsHt $TagsHt
+
             $NewObjectName = New-ObjectName -ObjectNameArray $ObjectNameArray
     
-            [hashtable]$ObjectMeta = Write-Meta -ObjectNameArray $ObjectNameArray -ValidTokens $ValidTokens -CreationDate $CreationDate
+            [hashtable]$ObjectMeta = Write-Meta -ObjectNameArray $ObjectNameArray -TagsCSV $TagsCSV -CreationDate $CreationDate
     
             [hashtable]$ObjectProperties = Write-Properties -Object $Object -NewName $NewObjectName -NameArray $ObjectNameArray -NameNEX $ObjectNameNEX -Ext $Extension
     
             [hashtable]$ObjectSelector = New-Selector -NameArray $ObjectNameArray -NewName $NewObjectName
     
-            if (!$LibraryContent.ContainsKey($Creator)) {
+            if (!$UserLibrary.ContainsKey($Collection)) {
     
-                $Counter.AddSet($PublishingType)
-    
-                $LibraryContent[$Creator] = @{}
+                $UserLibrary[$Collection] = @{}
                 
-                Add-TitleToLibrary -LibraryContent $LibraryContent -ObjectNameArray $ObjectNameArray -Object $Object -NewName $NewObjectName
+                Add-TitleToLibrary -UserLibrary $UserLibrary -ObjectNameArray $ObjectNameArray -Object $Object -NewName $NewObjectName
                 
                 $null = New-Item -Path ($ObjectProperties.ObjectTarget) -ItemType "directory"
+                
+                $EventCounter.AddSet($PublishingType)
     
             }
-            elseif ( ! $LibraryContent.$Creator.ContainsKey($Title) ) {
+            elseif ( ! $UserLibrary.$Collection.ContainsKey($Title) ) {
     
-                $Counter.AddTitle($PublishingType)
-    
-                Add-TitleToLibrary -LibraryContent $LibraryContent -ObjectNameArray $ObjectNameArray -Object $Object -NewName $NewObjectName
+                Add-TitleToLibrary -UserLibrary $UserLibrary -ObjectNameArray $ObjectNameArray -Object $Object -NewName $NewObjectName
+                
+                $EventCounter.AddTitle($PublishingType)
             
             }
-            elseif ($LibraryContent.$Creator.ContainsKey($Title) -and (! $LibraryContent.$Creator.$Title.VariantList.Contains($NewObjectName))) {
+            elseif ($UserLibrary.$Collection.ContainsKey($Title) -and (! $UserLibrary.$Collection.$Title.VariantList.Contains($NewObjectName))) {
 
                 $IsVariant = $true
-    
-                $Counter.AddTitle($PublishingType)
-    
+                
                 $VariantNameArray = ("PublishingType","Convention","Artist","Title","Meta")
                 New-VariantNameArray -NameArray $ObjectNameArray -VariantNameArray $VariantNameArray
-                
-                # Important: Overwrite $NewObjectname !
                 $VariantObjectName = New-ObjectName -ObjectNameArray $VariantNameArray
-    
+                
                 # Update ObjectNewName in ObjectProperties. Needed in Copying.
                 $ObjectProperties.ObjectNewName = $VariantObjectName
-                # Specific ObjectSelector for variants.
+                # Special ObjectSelector for variants.
                 $ObjectSelector.VariantObjectName = "$VariantObjectName"
-
+                
                 $ObjectMeta.Tags = "$($ObjectMeta.Tags),Variant"
-    
-                Add-VariantToLibrary -LibraryContent $LibraryContent -ObjectNameArray $ObjectNameArray -NewExtension $NewExtension -NewName $NewObjectName -VariantName $VariantObjectName
+                
+                Add-VariantToLibrary -UserLibrary $UserLibrary -ObjectNameArray $ObjectNameArray -NewExtension $NewExtension -NewName $NewObjectName -VariantName $VariantObjectName
+                $EventCounter.AddTitle($PublishingType)
+                $EventCounter.AddVariant()
     
             }
             else {
                 $IsDuplicate = $true
-                $Counter.AddDuplicate()
+                $EventCounter.AddDuplicate()
     
                 Add-Duplicate -Duplicates $Duplicates -Title $Title -ObjectPath $ObjectPath
-                Add-Skipped -Object $Object -Reason "Duplicate" -Extension $Extension
+                Add-Skipped -SkippedObjects $SkippedObjects -Object $Object -Reason "Duplicate" -Extension $Extension
             }
             
             if($IsDuplicate -eq $false){
@@ -1418,14 +1102,13 @@ foreach ($Object in $ToProcessLst) {
                 }
             }
         }
-        $SortingProgress += 1
-        $SortingCompleted = ($SortingProgress / $Counter.AllObjects) * 100
-        Write-Progress -Id 0 -Activity "Sorting" -Status "$ObjectNameNEX" -PercentComplete $SortingCompleted
     }
-    # Object already visited.
-    else {
-        $Counter.AddSkipped()
+    else { #< Object already visited.
+        $EventCounter.AddEFC()
     }
+    $SortingProgress += 1
+    $SortingCompleted = ($SortingProgress / $EventCounter.ToSort) * 100
+    Write-Progress -Id 0 -Activity "Sorting" -Status "$ObjectNameNEX" -PercentComplete $SortingCompleted
 }
 
 $VisitedObjects |  Export-Clixml -Path "$($PathsProgram.AppData)\VisitedObjects $($SettingsHt.LibraryName).xml" -Force
@@ -1438,7 +1121,7 @@ Write-Output "Creating folder structure: Done`n"
 Write-Output "Analyzing objects: Done`n"
 Start-Sleep -Seconds 1.0
 
-$Counter.ComputeMatches()
+$EventCounter.ComputeToCopy()
 
 ### End: Sorting ###
 
@@ -1446,10 +1129,7 @@ $Counter.ComputeMatches()
 
 ### Begin: Copying ###
 
-Show-String -StringArray (" ",
-"Copying objects. This can take a while.",
-" ")
-
+Show-String -StringArray (" ","Copying objects. This can take a while."," ")
 
 # Hashtable of successfully copied objects.
 # This allows the user to delete the successfully
@@ -1461,15 +1141,12 @@ $CopiedObjects = @{}
 # Ignores if the object actually gets copied successfully or not.
 $CopyProgress = 0
 
-# Set to 1 if SourceHash doesn't match TargetHash at least one time.
-$IntegrityFlag = 0
-
 $CopyingStopwatch.Start()
 
 foreach ($ObjectName in $ToCopy.Keys) {
 
     $CopyProgress += 1
-    $CopyCompleted = ($CopyProgress / $Counter.Matches) * 100
+    $CopyCompleted = ($CopyProgress / $EventCounter.ToCopy) * 100
     Write-Progress -Id 1 -Activity "Copying" -Status "$ObjectName" -PercentComplete $CopyCompleted
 
     $Parent  = $ToCopy.$ObjectName.ObjectParent
@@ -1497,8 +1174,13 @@ foreach ($ObjectName in $ToCopy.Keys) {
 
         if ($RobocopyExitCode -eq 1) {
 
-            $ToCopy.$ObjectName.TargetHash =
-            (Get-FileHash -LiteralPath "$Target\$Name" -Algorithm MD5).hash
+            if($SafeCopyFlag -eq 0){
+                $ToCopy.$ObjectName.TargetHash =
+                (Get-FileHash -LiteralPath "$Target\$Name" -Algorithm MD5).hash
+            }
+            else{
+                $ToCopy.$ObjectName.TargetHash = 0
+            }
 
             if ($ToCopy.$ObjectName.SourceHash -eq $ToCopy.$ObjectName.TargetHash) {
 
@@ -1515,47 +1197,48 @@ foreach ($ObjectName in $ToCopy.Keys) {
                     Rename-Item -LiteralPath "$Target\$Name" -NewName $ArchiveName
                 }
                 catch {
-                    Add-NoCopy -Object $ToCopy.$ObjectName -Reason "RenamingError"
 
-                    Remove-FromLibrary -LibraryContent $LibraryContent -ObjectSelector $LibraryLookUp.$ObjectName
+                    Add-NoCopy -SkippedObjects $SkippedObjects -Object $ToCopy.$ObjectName -Reason "RenamingError"
+                    Remove-FromLibrary -UserLibrary $UserLibrary -ObjectSelector $LibraryLookUp.$ObjectName
                     Remove-ComicInfo -ObjectSelector $LibraryLookUp.$ObjectName
-
                     Remove-Item -LiteralPath $XMLpath -Force
-                    $Counter.AddCopyError()
+
+                    $EventCounter.AddCopyError()
                     Continue
                 }
+
+                ### Begin: InsertXML ###
 
                 <#
                 .DESCRIPTION
                     Possible errors:
                         1.) 7Zip throws an error - probably because the archive is corrupt,
-                        when trying to move ComicInfo.xml into the archive.
-
+                            when trying to move ComicInfo.xml into the archive.
                         2.) XML doesn't exist.
 
                 .NOTES
-                    PS7 doesn't catch SeZipErrors, and
-                    PS5.1 doesn't save the ExitCode into the $SevenZipError array,
-                    so that $SevenZipError.length is always 0,
-                    what leads to the abomination below...
+                    PS7 doesn't catch SeZipErrors.
+                    PS5.1 doesn't save the 7z-ExitCode to the $SevenZipError array.
+                    This means $SevenZipError.length is _always_ 0, what requires the code below...
                 #>
-
-                ### Begin: InsertXML ###
 
                 if ($VersionMajor -eq 5){
 
                     try {
+
                         & $7zip a -bsp0 -bso0 "$Target\$ArchiveName" $XML *>&1
                         $null = $CopiedObjects.Add($ObjectName, $ToCopy.$ObjectName)
+                        $EventCounter.AddCopyGood()
+
                     }
                     catch {
-                        Add-NoCopy -Object $ToCopy.$ObjectName -Reason "XMLinsertionError"
 
-                        Remove-FromLibrary -LibraryContent $LibraryContent -ObjectSelector $LibraryLookUp.$ObjectName
+                        Add-NoCopy -SkippedObjects $SkippedObjects -Object $ToCopy.$ObjectName -Reason "XMLinsertionError"
+                        Remove-FromLibrary -UserLibrary $UserLibrary -ObjectSelector $LibraryLookUp.$ObjectName
                         Remove-ComicInfo -ObjectSelector $LibraryLookUp.$ObjectName
-
                         Remove-Item -LiteralPath "$Target\$ArchiveName" -Force
-                        $Counter.AddCopyError()
+
+                        $EventCounter.AddCopyError()
                     }
 
                 }
@@ -1564,44 +1247,44 @@ foreach ($ObjectName in $ToCopy.Keys) {
                     $SevenZipError = & $7zip a -bsp0 -bso0 "$Target\$ArchiveName" $XML *>&1
 
                     if ($SevenZipError.length -eq 0) {
+
                         $null = $CopiedObjects.Add($ObjectName, $ToCopy.$ObjectName)
+                        $EventCounter.AddCopyGood()
+
                     }
                     else {
-                        Add-NoCopy -Object $ToCopy.$ObjectName -Reason "XMLinsertionError"
 
-                        Remove-FromLibrary -LibraryContent $LibraryContent -ObjectSelector $LibraryLookUp.$ObjectName
+                        Add-NoCopy -SkippedObjects $SkippedObjects -Object $ToCopy.$ObjectName -Reason "XMLinsertionError"
+                        Remove-FromLibrary -UserLibrary $UserLibrary -ObjectSelector $LibraryLookUp.$ObjectName
                         Remove-ComicInfo -ObjectSelector $LibraryLookUp.$ObjectName
-
                         Remove-Item -LiteralPath "$Target\$ArchiveName" -Force
-                        $Counter.AddCopyError()
+
+                        $EventCounter.AddCopyError()
                     }
                 }
-
                 ### End: InsertXML ###
             }
             else {
-                $IntegrityFlag += 1
 
-                Add-NoCopy -Object $ToCopy.$ObjectName -Reason "HashMismatch"
-                Remove-FromLibrary -LibraryContent $LibraryContent -ObjectSelector $LibraryLookUp.$ObjectName
+                Add-NoCopy -SkippedObjects $SkippedObjects -Object $ToCopy.$ObjectName -Reason "HashMismatch"
+                Remove-FromLibrary -UserLibrary $UserLibrary -ObjectSelector $LibraryLookUp.$ObjectName
                 Remove-ComicInfo -ObjectSelector $LibraryLookUp.$ObjectName
-                $Counter.AddCopyError()
+
+                $EventCounter.AddCopyError()
             }
         }
         else {
-            Add-NoCopy -Object $ToCopy.$ObjectName -Reason "RobocopyError: $($RobocopyExitCode)"
-            Remove-FromLibrary -LibraryContent $LibraryContent -ObjectSelector $LibraryLookUp.$ObjectName
+
+            Add-NoCopy -SkippedObjects $SkippedObjects -Object $ToCopy.$ObjectName -Reason "RobocopyError: $($RobocopyExitCode)"
+            Remove-FromLibrary -UserLibrary $UserLibrary -ObjectSelector $LibraryLookUp.$ObjectName
             Remove-ComicInfo -ObjectSelector $LibraryLookUp.$ObjectName
-            $Counter.AddCopyError()
+
+            $EventCounter.AddCopyError()
         }
     }
-
     ### End: CopyArchive ###
 
-
-
     ### Begin: CopyFolder ###
-
     elseif ($ToCopy.$ObjectName.Extension -eq "Folder") {
 
         <#
@@ -1617,10 +1300,12 @@ foreach ($ObjectName in $ToCopy.Keys) {
             $null = New-Item -Path $Target -Name $NewName -ItemType "directory"
         }
         catch {
-            Add-NoCopy -Object $ToCopy.$ObjectName -Reason "ErrorCreatingFolder"
-            Remove-FromLibrary -LibraryContent $LibraryContent -ObjectSelector $LibraryLookUp.$ObjectName
+
+            Add-NoCopy -SkippedObjects $SkippedObjects -Object $ToCopy.$ObjectName -Reason "ErrorCreatingFolder"
+            Remove-FromLibrary -UserLibrary $UserLibrary -ObjectSelector $LibraryLookUp.$ObjectName
             Remove-ComicInfo -ObjectSelector $LibraryLookUp.$ObjectName
-            $Counter.AddCopyError()
+
+            $EventCounter.AddCopyError()
             Continue
         }
 
@@ -1629,12 +1314,16 @@ foreach ($ObjectName in $ToCopy.Keys) {
 
         if ($RobocopyExitCode -eq 1) {
 
-            # Get the folder size (instead of a hash) _before_ inserting the ComicInfo.XML file.
-            $ToCopy.$ObjectName.TargetHash =
-                ((Get-ChildItem -LiteralPath "$Target\$NewName") | Measure-Object -Sum Length).sum
+            if($SafeCopyFlag -eq 0){
+                # Get the folder size (instead of a hash) _before_ inserting the ComicInfo.XML file.
+                $ToCopy.$ObjectName.TargetHash =
+                    ((Get-ChildItem -LiteralPath "$Target\$NewName") | Measure-Object -Sum Length).sum
+            }
+            else{
+                $ToCopy.$ObjectName.TargetHash = 0
+            }
 
             if ($ToCopy.$ObjectName.SourceHash -eq $ToCopy.$ObjectName.TargetHash) {
-
                 <#
                 .DESCRIPTION
                     Try to create an Archive with the copied folder's content
@@ -1653,12 +1342,16 @@ foreach ($ObjectName in $ToCopy.Keys) {
                     try {
                         & $7zip a -mx3 -bsp0 -bso0 $Target7zip $Source7zip *>&1
                         $null = $CopiedObjects.Add($ObjectName, $ToCopy.$ObjectName)
+
+                        $EventCounter.AddCopyGood()
                     }
                     catch {
-                        Add-NoCopy -Object $ToCopy.$ObjectName -Reason "ErrorCreatingArchive"
-                        Remove-FromLibrary -LibraryContent $LibraryContent -ObjectSelector $LibraryLookUp.$ObjectName
+
+                        Add-NoCopy -SkippedObjects $SkippedObjects -Object $ToCopy.$ObjectName -Reason "ErrorCreatingArchive"
+                        Remove-FromLibrary -UserLibrary $UserLibrary -ObjectSelector $LibraryLookUp.$ObjectName
                         Remove-ComicInfo -ObjectSelector $LibraryLookUp.$ObjectName
-                        $Counter.AddCopyError()
+
+                        $EventCounter.AddCopyError()
                     }
 
                 }
@@ -1667,34 +1360,39 @@ foreach ($ObjectName in $ToCopy.Keys) {
                     $SevenZipError = & $7zip a -mx3 -bsp0 -bso0 $Target7zip $Source7zip *>&1
 
                     if ($SevenZipError -eq 0) {
+
                         $null = $CopiedObjects.Add($ObjectName, $ToCopy.$ObjectName)
+
+                        $EventCounter.AddCopyGood()
                     }
                     else {
-                        Add-NoCopy -Object $ToCopy.$ObjectName -Reason "ErrorCreatingArchive"
-                        Remove-FromLibrary -LibraryContent $LibraryContent -ObjectSelector $LibraryLookUp.$ObjectName
+
+                        Add-NoCopy -SkippedObjects $SkippedObjects -Object $ToCopy.$ObjectName -Reason "ErrorCreatingArchive"
+                        Remove-FromLibrary -UserLibrary $UserLibrary -ObjectSelector $LibraryLookUp.$ObjectName
                         Remove-ComicInfo -ObjectSelector $LibraryLookUp.$ObjectName
-                        $Counter.AddCopyError()
+
+                        $EventCounter.AddCopyError()
                     }
                 }
             }
+            else { #< Hash mismatch
 
-            # Hash mismatch
-            else {
-                $IntegrityFlag += 1
-
-                Add-NoCopy -Object $ToCopy.$ObjectName -Reason "HashMismatch"
-                Remove-FromLibrary -LibraryContent $LibraryContent -ObjectSelector $LibraryLookUp.$ObjectName
+                Add-NoCopy -SkippedObjects $SkippedObjects -Object $ToCopy.$ObjectName -Reason "HashMismatch"
+                Remove-FromLibrary -UserLibrary $UserLibrary -ObjectSelector $LibraryLookUp.$ObjectName
                 Remove-ComicInfo -ObjectSelector $LibraryLookUp.$ObjectName
-                $Counter.AddCopyError()
+
+                $EventCounter.AddCopyError()
             }
             # Whatever happens above, remove the unzipped folder.
             Remove-Item -LiteralPath "$Target\$NewName" -Recurse -Force
         }
         else {
-            Add-NoCopy -Object $ToCopy.$ObjectName -Reason "RobocopyError: $($RobocopyExitCode)"
-            Remove-FromLibrary -LibraryContent $LibraryContent -ObjectSelector $LibraryLookUp.$ObjectName
+
+            Add-NoCopy -SkippedObjects $SkippedObjects -Object $ToCopy.$ObjectName -Reason "RobocopyError: $($RobocopyExitCode)"
+            Remove-FromLibrary -UserLibrary $UserLibrary -ObjectSelector $LibraryLookUp.$ObjectName
             Remove-ComicInfo -ObjectSelector $LibraryLookUp.$ObjectName
-            $Counter.AddCopyError()
+
+            $EventCounter.AddCopyError()
         }
     }
     ### End: CopyFolder ###
@@ -1702,14 +1400,10 @@ foreach ($ObjectName in $ToCopy.Keys) {
     Add-LogEntry -ObjectProperties $ToCopy.$ObjectName -Path $PathsLibrary.Logs
 }
 
-$SortingProgress = 0
-$CopyProgress = 0
-
-$TotalCopyingTime = ($CopyingStopwatch.Elapsed).toString()
 $CopyingStopwatch.Stop()
-
-$TotalRuntime = ($RuntimeStopwatch.Elapsed).toString()
 $RuntimeStopwatch.Stop()
+$TotalCopyingTime = ($CopyingStopwatch.Elapsed).toString()
+$TotalRuntime = ($RuntimeStopwatch.Elapsed).toString()
 
 ### End: Copying ###
 
@@ -1720,26 +1414,26 @@ $RuntimeStopwatch.Stop()
 Write-Information -MessageData "Finalizing. Please wait." -InformationAction Continue
 
 # Write Log-Files
-foreach ($SkippedObjectProperties in $SkippedObjects.Keys) {
-    Add-SkippedLogEntry -SkippedObjectProperties $SkippedObjects.$SkippedObjectProperties -Path $PathsLibrary.Logs
+foreach ($Reason in $SkippedObjects.Keys) {
+    foreach($Object in $SkippedObjects.$Reason.Keys){
+
+        Add-SkippedLogEntry -SkippedObjectProperties $SkippedObjects.$Reason.$Object -Path $PathsLibrary.Logs
+    }
 }
 
-$LibraryContent | Export-Clixml -Path "$($PathsProgram.Libs)\LibraryContent $($SettingsHt.LibraryName).xml" -Force
 
-# Serialize SkippedObjects - necessary for the CopySkippedObjects script.
+$UserLibrary | Export-Clixml -Path "$($PathsProgram.Libs)\UserLibrary $($SettingsHt.LibraryName).xml" -Force
+
+# Serialize SkippedObjects - necessary for CopySkippedObjects.ps1 in Tools.
 $SkippedObjects | Export-Clixml -Path "$($PathsProgram.Skipped)\Skipped $($SettingsHt.LibraryName).xml" -Force
 
-# Serialize CopiedObjectsHt - necessary for the DeleteOriginals script.
+# Serialize CopiedObjectsHt - necessary DeleteOriginals.ps1 in Tools.
 $CopiedObjects | Export-Clixml -Path "$($PathsProgram.Copied)\CopiedObjects $($SettingsHt.LibraryName).xml" -Force
 
-$Counter.ComputeNotProcessed()
+$EventCounter.ComputeSkipped()
 
 
-
-Show-String -StringArray (" ",
-"Script finished", 
-" ")
-
+Show-String -StringArray (" ","Script finished"," ")
 
 $Summary = @"
 
@@ -1756,26 +1450,30 @@ SUMMARY [$Timestamp]
 
 > TotalCopyingTime: $TotalCopyingTime
 
-# FoundObjects: $($Counter.AllObjects)
+# FoundObjects: $($EventCounter.AllObjects)
 =================================================
 
-> Successfully Copied Objects: $($CopiedObjects.Count)
+> Successfully Copied Objects: $($EventCounter.CopyGood)
 
-> Found $($Counter.Manga) Manga from $($Counter.Artists) Artists
+> CopyCompleteness (should be 0): $($EventCounter.ToCopy - $CopyProgress )
 
-> Found $($Counter.Doujinshi) Doujinshi from $($Counter.Conventions) Conventions
+> Found $($EventCounter.Manga) Manga from $($EventCounter.Artists) Artists
 
-> Found $($Counter.Anthologies) Anthologies
+> Found $($EventCounter.Doujinshi) Doujinshi from $($EventCounter.Conventions) Conventions
+
+> Found $($EventCounter.Anthologies) Anthologies
+
+> Found $($EventCounter.Variants) Variants
 
 
-# Objects not copied: $($Counter.NotProcessed)
+# Skipped Objects: $($EventCounter.Skipped)
 =================================================
 
-> Duplicates: $($Counter.Duplicates)
+> Duplicates: $($EventCounter.Duplicates)
 
-> UnmatchedObjects: $($Counter.NoMatch)
+> UnmatchedObjects: $($EventCounter.NoMatch)
 
-> Copy Errors: $($Counter.CopyErrors)
+> Copy Errors: $($EventCounter.CopyErrors)
 
 > Single files with
   wrong extension (.mov,.mp4,.pdf,...): $WrongExtensionCounter
@@ -1789,11 +1487,12 @@ SUMMARY [$Timestamp]
 "@
 
 $Summary | Out-Host
-
 $Summary | Out-File -FilePath "$($PathsLibrary.Logs)\ProgramLog $Timestamp.txt" -Encoding unicode -Append -Force
-
 
 # For debugging only
 Copy-ScriptOutput -LibraryName $SettingsHt.LibraryName -PSVersion $PSVersion -Delete
+
+$SortingProgress = 0
+$CopyProgress = 0
 
 ### End: Finalizing ###

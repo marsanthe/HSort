@@ -13,6 +13,8 @@ function Read-Settings{
 
         "ScriptVersion" = $ScriptVersion;
 
+        "SafeCopy"      = "";
+
         "LibraryName" = "";
 
         "Source" = ""
@@ -28,6 +30,11 @@ function Read-Settings{
             # We need ^ as StartOfNewLine-marker, since the regex
             # would otherwise match a part of the description!
             if($line -match "(?<Argument>^LibraryName) += +(?<Value>.+)"){
+
+                $ParsedSettings_Hst[$Matches.Argument] = $Matches.Value
+            }
+
+            elseif ($line -match "(?<Argument>^SafeCopy) += +(?<Value>.+)") {
 
                 $ParsedSettings_Hst[$Matches.Argument] = $Matches.Value
             }
@@ -77,22 +84,28 @@ function Write-Settings{
 
         "ScriptVersion"       = $ScriptVersion;
 
+        "TxtSafeCopy"         = ("# Calculate FileHash/FolderSize.",
+                                 "# before and after copying to detect copy errors.",
+                                 "# Recommended setting: True `r`n");
+
+        "SafeCopy"            = "True";
+
         "TxtLibraryName"      = ("# Please enter a name for your library folder.",
                                  "# For example:  LibraryName = MyMangaLibrary",
                                  "# Allowed characters are: [a-zA-Z0-9_+-]`r`n");
 
-        "LibraryName"         = "Hlib0";
+        "LibraryName"         = "Hlib_$Timestamp";
 
-        "TxtSource"        = ("# Please enter the path to a source folder.",
+        "TxtSource"           = ("# Please enter the path to a source folder.",
                                  "# For example, if you have your Manga in a folder named [Manga] on your Desktop,",
                                  "# enter:  C:\Users\YourUserName\Desktop\Manga`r`n");
 
-        "Source"           = "C:\Users\YourUserName\Desktop\Manga";
+        "Source"              = "C:\Users\YourUserName\Desktop\Manga";
 
-        "TxtTarget" = ("# Where to create the library.",
-            "# For example:  C:\Users\YourUserName\Desktop  will create the library on your Desktop.`r`n");
+        "TxtTarget"           = ("# Where to create the library.",
+                                 "# For example:  C:\Users\YourUserName\Desktop  will create the library on your Desktop.`r`n");
 
-        "Target"    = "C:\Users\YourUserName\Desktop\Manga"
+        "Target"              = "C:\Users\YourUserName\Desktop\Manga"
         
     }
 
@@ -517,7 +530,20 @@ function Confirm-Settings{
             Write-Information -MessageData "Target $($CurrentSettings.Target): OK`n" -InformationAction Continue
 
             if(Test-Path -Path $CurrentSettings.Source){
-                Write-Information -MessageData "LibrarySource $($CurrentSettings.Source): OK`n" -InformationAction Continue
+
+                if ($CurrentSettings.Target -ne $CurrentSettings.Source) {
+
+                    Write-Information -MessageData "LibrarySource $($CurrentSettings.Source): OK`n" -InformationAction Continue
+
+                }
+                else{
+                    $ConfirmSettings_ExitCode = 1
+
+                    Show-Information -InformationText("Error",
+                        "==========================",
+                        " ",
+                        "Source and target must be different directories.")
+                }
             }
             else{
 

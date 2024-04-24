@@ -94,7 +94,7 @@ function Write-Settings{
                                  "# For example:  LibraryName = MyMangaLibrary",
                                  "# Allowed characters are: [a-zA-Z0-9_+-]`r`n");
 
-        "LibraryName"         = "Hlib_$Timestamp";
+        "LibraryName"         = "YourLibraryName";
 
         "TxtSource"           = ("# Please enter the path to a source folder.",
                                  "# For example, if you have your Manga in a folder named [Manga] on your Desktop,",

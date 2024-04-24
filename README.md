@@ -1,6 +1,8 @@
 
 # HSort
 
+![alt text](https://github.com/marsanthe/HSort/blob/main/Images/HSortLogo.png)
+
 <p>
 HSort creates a strucutred library from your H-Manga that can conveniently to be browsed with <strong> Kavita </strong>.
 </p>

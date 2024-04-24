@@ -1,12 +1,20 @@
 
-# HSort
 
-![alt text](https://github.com/marsanthe/HSort/blob/main/Images/HSortLogo.png)
+
+![alt text](https://github.com/marsanthe/HSort/blob/main/Images/LogoUnderlined.jpg)
 
 <p>
+
 HSort creates a <strong> Library </strong> (a folder of a certain structure) from your H-Manga, that is compatible with <strong> Kavita </strong>.
 
 [Kavita Reading Server](https://github.com/Kareadita/Kavita)
+
+</p>
+
+<p> 
+
+![alt text](https://github.com/marsanthe/HSort/blob/main/Images/HSortImage2.jpg)
+
 </p>
 
 ## Please Note

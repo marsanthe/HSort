@@ -26,7 +26,7 @@ HSort creates a <strong> Library </strong> (a folder of a certain structure) fro
 
 - <strong>This script does not modify your source folder/files in any way</strong>
 
-- HSort creates a <strong> Library </strong> (folder) from your Manga that is compatible with Kavita - [Kavita Naming convention / File Structure](https://wiki2.kavitareader.com/guides/scanner) <br>
+- HSort creates a <strong> Library </strong> (folder) from your Manga that is compatible with Kavita - [Kavita Naming convention / File Structure](https://wiki.kavitareader.com/guides/scanner) <br>
 
 - HSort <strong> sorts </strong> all your Manga by Artists (for generic Manga), Conventions (for Doujinshi) and Anthologies<br>
 

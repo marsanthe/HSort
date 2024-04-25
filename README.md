@@ -20,7 +20,7 @@ HSort creates a <strong> Library </strong> (a folder of a certain structure) fro
 ## Please Note
 
 1. HSort only works for Manga that are named by the <strong>E-Hentai Naming Convention</strong><br>
-2. Kavita usually needs about <strong> three scans </strong>to display the complete content of a Library correctly<br> - for details see [HSort-Wiki/HSort and Kavita]
+2. Kavita usually needs about <strong> three scans </strong>to display the complete content of a Library correctly<br> - for details see [HSort Wiki - Getting Started](https://github.com/marsanthe/HSort/wiki/1-Getting-Started)
 
 ## Overview
 

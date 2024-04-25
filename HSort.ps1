@@ -1490,7 +1490,7 @@ $Summary | Out-Host
 $Summary | Out-File -FilePath "$($PathsLibrary.Logs)\ProgramLog $Timestamp.txt" -Encoding unicode -Append -Force
 
 # For debugging only
-Copy-ScriptOutput -LibraryName $SettingsHt.LibraryName -PSVersion $PSVersion -Delete
+# Copy-ScriptOutput -LibraryName $SettingsHt.LibraryName -PSVersion $PSVersion
 
 $SortingProgress = 0
 $CopyProgress = 0

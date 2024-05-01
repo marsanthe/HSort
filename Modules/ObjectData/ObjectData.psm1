@@ -193,18 +193,24 @@ function Select-Tags {
     #>
 
     Param(
-        [Parameter(Mandatory)]
-        [AllowEmptyString()]
-        [string]$MetaTokenString,
 
-        [string]$Title,
-
+        [array]$ObjectNameArray,
+        
         [hashtable]$TagsHt
 
+        #[AllowEmptyString()]
+        #[string]$MetaTokenString
+
+
+        #[string]$Title,
 
     )
 
     $TagList = [List[string]]::new()
+
+    ### Select Tags from Title ###
+
+    $Title = $ObjectNameArray[3]
     
     $Title = $Title.ToLower()
     $TitleTokenSet = [System.Collections.Generic.HashSet[String]] @(($Title.Split(" ")))
@@ -218,6 +224,10 @@ function Select-Tags {
             }
         }
     }
+
+    ### Select Tags from Meta ###
+
+    $MetaTokenString = $ObjectNameArray[4]
 
     if ($MetaTokenString -ne "") {
         
@@ -263,25 +273,21 @@ function Write-Meta {
         [array]$ObjectNameArray,
 
         [Parameter(Mandatory)]
-        [AllowEmptyString()]
-        [string]$TagsCSV,
+        [string]$CreationDate,
 
         [Parameter(Mandatory)]
-        [string]$CreationDate
+        [hashtable]$TagsHT
     )
 
     $PublishingType = $ObjectNameArray[0]
-
-    # Empty string if Object is not Doujinshi.
-    $Convention = $ObjectNameArray[1]
-
-    # Artist is "Anthology" for Anthologies.
-    $Artist = $ObjectNameArray[2]
+    $Convention = $ObjectNameArray[1] # Empty string if Object is not Doujinshi.
+    $Artist = $ObjectNameArray[2] # Artist is "Anthology" for Anthologies.
     $Title = $ObjectNameArray[3]
 
     $DateArray = $CreationDate.split("-")
-    $yyyy = $DateArray[0]
-    $MM = $DateArray[1]
+    $yyyy = $DateArray[0]; $MM = $DateArray[1]
+
+    $TagsCSV = Select-Tags -ObjectNameArray $ObjectNameArray -TagsHt $TagsHt
 
     switch ($PublishingType) {
 
@@ -328,9 +334,6 @@ function Write-Properties {
         [array]$NameArray,
 
         [Parameter(Mandatory)]
-        [string]$NameNEX,
-
-        [Parameter(Mandatory)]
         [string]$Ext
     )
 
@@ -358,7 +361,7 @@ function Write-Properties {
     }
     else {
 
-        $NewExtension = ""
+        $NewExtension = ".cbz"
 
         if($SafeCopyFlag -eq 0){
             $SourceHash = (($Object | Get-ChildItem) | Measure-Object -Sum Length).sum
@@ -392,8 +395,7 @@ function Write-Properties {
         ObjectSource  = ($Object.FullName);
         ObjectNewName = $NewName;
         ObjectName    = $Object.Name;
-        ObjectNameNEX = $NameNEX;
-        Extension     = $Ext;
+        Extension     = $Ext; # Required to check if Object is file or folder in COPY
         NewExtension  = $NewExtension;
         ObjectTarget  = $ObjectTarget;
         ObjectParent  = (Split-Path -Parent $Object.FullName);

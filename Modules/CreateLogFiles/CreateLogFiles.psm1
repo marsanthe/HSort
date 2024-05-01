@@ -15,12 +15,14 @@ function Add-LogEntry{
     # since we want to preserve the order of the properties.
 
     $Item_Log = [PSCustomObject]@{
-    Extension = "{0}" -f ($ObjectProperties.Extension)
-    Name = "{0}" -f ($ObjectProperties.ObjectName)
-    NewName = "{0}" -f ($ObjectProperties.ObjectNewName)
-    TargetDirectory = "{0}" -f ($ObjectProperties.ObjectTarget)
-    OriginalFileHash = "{0}" -f ($ObjectProperties.SourceHash)
-    CopiedFileHash = "{0}" -f ($ObjectProperties.TargetHash)}
+
+        #Extension = "{0}" -f ($ObjectProperties.Extension)
+        Source = "{0}" -f ($ObjectProperties.ObjectSource)
+        Target           = "{0}" -f "$($ObjectProperties.ObjectTarget)\$($ObjectProperties.ObjectNewName)$($ObjectProperties.NewExtension)"
+        OriginalFileHash = "{0}" -f ($ObjectProperties.SourceHash)
+        CopiedFileHash = "{0}" -f ($ObjectProperties.TargetHash)
+
+    }
 
     #Calculated properties of an Item_Log object
 
@@ -35,36 +37,32 @@ function Add-LogEntry{
         This is a shorter option than expression = { $_.<PropertyName> }.
     #>
 
+    # $Property0 = @{
+    # expression = "Extension"
+    # width = 30}
+
     $Property0 = @{
-    expression = "Extension"
-    width = 30}
+    expression = "Source"
+    width = 100}
 
     $Property1 = @{
-    expression = "Name"
-    width = 50}
+    expression = "Target"
+    width = 100}
 
     $Property2 = @{
-    expression = "NewName"
-    width = 50}
-
-    $Property3 = @{
-    expression = "TargetDirectory"
-    width = 50}
-
-    $Property4 = @{
     expression = "OriginalFileHash"
     width = 40}
 
-    $Property5 = @{
+    $Property3 = @{
     expression = "CopiedFileHash"
     width = 40}
 
     $Item_Log | Format-Table -Property $Property0,
     $Property1,
     $Property2,
-    $Property3,
-    $Property4,
-    $Property5 | Out-File -FilePath "$Path\ObjectLog $LogModuleTimestamp.txt" -Encoding unicode -Width 400 -Append -Force
+    $Property3 -Wrap | Out-File -FilePath "$Path\ObjectLog $LogModuleTimestamp.txt" -Encoding unicode -Width 400 -Append -Force
+
+
 }
 
 function Add-SkippedLogEntry{
@@ -79,9 +77,11 @@ function Add-SkippedLogEntry{
         )
 
     $SkippedFilesLog = [PSCustomObject]@{
-    Path = "{0}" -f ($SkippedObjectProperties.Path)
-    Reason = "{0}" -f ($SkippedObjectProperties.Reason)
-    Test = "Test"}
+
+        Path = "{0}" -f ($SkippedObjectProperties.Path)
+        Reason = "{0}" -f ($SkippedObjectProperties.Reason)
+        Test = "Test"
+    }
 
     $Property0 = @{
     expression = "Path"
@@ -92,7 +92,7 @@ function Add-SkippedLogEntry{
     width = 60}
 
     $SkippedFilesLog | Format-Table -Property $Property0,
-    $Property1 | Out-File -FilePath "$Path\SkippedObjects $LogModuleTimestamp.txt" -Encoding unicode -Width 400 -Append -Force
+    $Property1 -Wrap | Out-File -FilePath "$Path\SkippedObjects $LogModuleTimestamp.txt" -Encoding unicode -Width 400 -Append -Force
 }
 
 function Add-TimingLogEntry{
@@ -135,5 +135,5 @@ function Add-TimingLogEntry{
 
     $TimingTable | Format-Table -Property $Property0,
     $Property1,
-    $Property2 | Out-File -FilePath "$Path\$FileName $LogModuleTimestamp.txt" -Encoding unicode -Width 260 -Append -Force
+    $Property2 -Wrap | Out-File -FilePath "$Path\$FileName $LogModuleTimestamp.txt" -Encoding unicode -Width 260 -Append -Force
 }

@@ -1,3 +1,4 @@
+
 using namespace System.Collections.Generic
 
 <# 
@@ -5,6 +6,8 @@ using namespace System.Collections.Generic
     Accessed in ObjectData.psm1 for Tags.txt
 #>
 $global:CallDirectory = Get-Location
+
+# To import modules successfully, Script has to be executed from .\HSort !
 
 Import-Module -Name "$CallDirectory\Modules\GetObjects\GetObjects.psm1"
 Import-Module -Name "$CallDirectory\Modules\CreateComicInfoXML\CreateComicInfoXML.psm1"
@@ -338,7 +341,11 @@ function Edit-ObjectNameArray {
                 $Token = $Token.trim('.cbz')
                 $Token = $Token.trim('.cbr')
 
+                ## Turn meta into a single string of the form "aaa,bbb,ccc,..."
+                
+                # Initialize string to a known state
                 $Token = (($Token -replace '\+', '') -replace ',', '')
+                
                 $Token = (($Token -replace '\{|\[|\(', '+') -replace '\}|\]|\)', '+')
                 $Token = ($Token -replace '\+ \+', ',')
                 $Token = $Token.trim('+')
@@ -377,7 +384,15 @@ function Add-TitleToLibrary {
     $PublishingType = $ObjectNameArray[0]
     $Convention = $ObjectNameArray[1]
     $Artist = $ObjectNameArray[2]
-    $Title = $ObjectNameArray[3]                        
+    $Title = $ObjectNameArray[3]
+    
+    if($ObjectNameArray[4]){
+
+        $Meta = ($ObjectNameArray[4]).Split(",")
+    }
+    else{
+        $Meta = @()
+    }
 
     
     if ($PublishingType -eq "Manga") {
@@ -389,7 +404,8 @@ function Add-TitleToLibrary {
             $NewName      = @{
                 ObjectSource    = $Object.FullName;
                 ObjectLocation  = "$($PathsLibrary.Artists)\$Artist";
-                FirstDiscovered = $Timestamp
+                FirstDiscovered = $Timestamp;
+                Meta            = $Meta
             }
 
         }
@@ -408,6 +424,7 @@ function Add-TitleToLibrary {
                 ObjectSource    = $Object.FullName;
                 ObjectLocation  = "$($PathsLibrary.Conventions)\$Convention";
                 FirstDiscovered = $Timestamp;
+                Meta            = $Meta
             }
 
         }  
@@ -425,6 +442,7 @@ function Add-TitleToLibrary {
                 ObjectSource    = $Object.FullName;
                 ObjectLocation  = "$($PathsLibrary.Anthologies)\$Artist";
                 FirstDiscovered = $Timestamp;
+                Meta            = $Meta
             }
 
         }
@@ -805,7 +823,6 @@ else {
 ### End:  ProgramState ###
 
 
-
 ### Begin: Paths-LibraryFolder ###
 
 $global:PathsLibrary = [ordered]@{
@@ -975,6 +992,7 @@ foreach ($Object in $ToProcessLst) {
 
     if ($IsFile) {
 
+        # $ObjectNameNEX : ObjectNameNoEXtension
         $ObjectNameNEX = $ObjectName.Substring(0, $ObjectName.LastIndexOf('.'))
         $Extension = [System.IO.Path]::GetExtension($Object.FullName)
 
@@ -1028,16 +1046,14 @@ foreach ($Object in $ToProcessLst) {
             $PublishingType = $ObjectNameArray[0]; $Convention = $ObjectNameArray[1]; $Artist = $ObjectNameArray[2]; $Title = $ObjectNameArray[3]; $MetaToken = $ObjectNameArray[4]
 
             $Collection = Select-Collection -ObjectNameArray $ObjectNameArray
-
-            # Import-Tags moved up. Import tags only once!
             
-            $TagsCSV = Select-Tags -MetaTokenString $MetaToken -Title $Title -TagsHt $TagsHt
+            #$TagsCSV = Select-Tags -ObjectNameArray $ObjectNameArray -TagsHt $TagsHt
 
             $NewObjectName = New-ObjectName -ObjectNameArray $ObjectNameArray
     
-            [hashtable]$ObjectMeta = Write-Meta -ObjectNameArray $ObjectNameArray -TagsCSV $TagsCSV -CreationDate $CreationDate
+            [hashtable]$ObjectMeta = Write-Meta -ObjectNameArray $ObjectNameArray -CreationDate $CreationDate -TagsHt $TagsHt
     
-            [hashtable]$ObjectProperties = Write-Properties -Object $Object -NewName $NewObjectName -NameArray $ObjectNameArray -NameNEX $ObjectNameNEX -Ext $Extension
+            [hashtable]$ObjectProperties = Write-Properties -Object $Object -NewName $NewObjectName -NameArray $ObjectNameArray -Ext $Extension #-NameNEX $ObjectNameNEX 
     
             [hashtable]$ObjectSelector = New-Selector -NameArray $ObjectNameArray -NewName $NewObjectName
     
@@ -1067,10 +1083,9 @@ foreach ($Object in $ToProcessLst) {
                 New-VariantNameArray -NameArray $ObjectNameArray -VariantNameArray $VariantNameArray
                 $VariantObjectName = New-ObjectName -ObjectNameArray $VariantNameArray
                 
-                # Update ObjectNewName in ObjectProperties. Needed in Copying.
-                $ObjectProperties.ObjectNewName = $VariantObjectName
-                # Special ObjectSelector for variants.
-                $ObjectSelector.VariantObjectName = "$VariantObjectName"
+                $ObjectProperties.ObjectNewName = $VariantObjectName # Update ObjectNewName in ObjectProperties. Needed in Copying.
+                
+                $ObjectSelector.VariantObjectName = "$VariantObjectName" # Special ObjectSelector for variants.
                 
                 $ObjectMeta.Tags = "$($ObjectMeta.Tags),Variant"
                 
@@ -1151,7 +1166,7 @@ foreach ($ObjectName in $ToCopy.Keys) {
 
     $Parent  = $ToCopy.$ObjectName.ObjectParent
     $Target  = $ToCopy.$ObjectName.ObjectTarget
-    $Name    = $ToCopy.$ObjectName.ObjectName
+    $Name    = $ToCopy.$ObjectName.ObjectName # is Object.Name
     $NewName = $ToCopy.$ObjectName.ObjectNewName
 
     # Define XML source
@@ -1184,6 +1199,8 @@ foreach ($ObjectName in $ToCopy.Keys) {
 
             if ($ToCopy.$ObjectName.SourceHash -eq $ToCopy.$ObjectName.TargetHash) {
 
+                ### Set name of file in Library
+                
                 $ArchiveName = "$NewName$($ToCopy.$ObjectName.NewExtension)"
 
                 <#
@@ -1227,7 +1244,8 @@ foreach ($ObjectName in $ToCopy.Keys) {
                     try {
 
                         & $7zip a -bsp0 -bso0 "$Target\$ArchiveName" $XML *>&1
-                        $null = $CopiedObjects.Add($ObjectName, $ToCopy.$ObjectName)
+                        #$null = $CopiedObjects.Add($ObjectName, $ToCopy.$ObjectName)
+                        $null = $CopiedObjects[$ObjectName] = @{"Source" = $ToCopy.$ObjectName.ObjectSource; "Extension" = $ToCopy.$ObjectName.Extension}
                         $EventCounter.AddCopyGood()
 
                     }
@@ -1248,7 +1266,8 @@ foreach ($ObjectName in $ToCopy.Keys) {
 
                     if ($SevenZipError.length -eq 0) {
 
-                        $null = $CopiedObjects.Add($ObjectName, $ToCopy.$ObjectName)
+                        #$null = $CopiedObjects.Add($ObjectName, $ToCopy.$ObjectName)
+                        $null = $CopiedObjects[$ObjectName] = @{"Source" = $ToCopy.$ObjectName.ObjectSource; "Extension" = $ToCopy.$ObjectName.Extension }
                         $EventCounter.AddCopyGood()
 
                     }
@@ -1289,7 +1308,7 @@ foreach ($ObjectName in $ToCopy.Keys) {
 
         <#
         .DESCRIPTION
-            Create NewName folder.
+            Create empty NewName folder.
         .NOTES
             Possible errors:
             A folder of this NAME alredy exists.
@@ -1341,7 +1360,8 @@ foreach ($ObjectName in $ToCopy.Keys) {
 
                     try {
                         & $7zip a -mx3 -bsp0 -bso0 $Target7zip $Source7zip *>&1
-                        $null = $CopiedObjects.Add($ObjectName, $ToCopy.$ObjectName)
+
+                        $null = $CopiedObjects[$ObjectName] = @{"Source" = $ToCopy.$ObjectName.ObjectSource; "Extension" = $ToCopy.$ObjectName.Extension }
 
                         $EventCounter.AddCopyGood()
                     }
@@ -1361,7 +1381,7 @@ foreach ($ObjectName in $ToCopy.Keys) {
 
                     if ($SevenZipError -eq 0) {
 
-                        $null = $CopiedObjects.Add($ObjectName, $ToCopy.$ObjectName)
+                        $null = $CopiedObjects[$ObjectName] = @{"Source" = $ToCopy.$ObjectName.ObjectSource; "Extension" = $ToCopy.$ObjectName.Extension }
 
                         $EventCounter.AddCopyGood()
                     }
@@ -1441,7 +1461,7 @@ SUMMARY [$Timestamp]
 =================================================
 
 [ ScriptVersion: $ScriptVersion ]
-[ UsedPowershellVersion: $($VersionMajor).$($VersionMinor) ]
+[ UsedPowershellVersion: $PSVersion ]
 [ Settings.txt location: $($PathsProgram.TxtSettings) ]
 
 > TotalRuntime: $TotalRuntime

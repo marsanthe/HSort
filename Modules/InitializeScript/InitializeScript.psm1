@@ -2,6 +2,69 @@ using namespace System.Collections.Generic
 
 $ErrorActionPreference = "Stop"
 
+function Show-Information {
+
+    Param(
+        [Parameter(Mandatory)]
+        #[AllowEmptyString()]
+        [string[]]$InformationText
+    )
+
+    if($InformationText){
+        for ($i = 0; $i -le ($InformationText.length - 1); $i++) {
+            Write-Information -MessageData $InformationText[$i] -InformationAction Continue
+        }
+    }
+    else{
+        Write-Information -MessageData " " -InformationAction Continue
+    }
+
+}
+
+function Get-UserInput {
+    Param(
+        [Parameter(Mandatory)]
+        [hashtable]$Dialog
+    )
+
+    
+    $ReturnValue = 999
+    $UserResponse = ""
+
+    if ($Dialog.Intro) {
+        Show-Information -InformationText $Dialog.Intro
+    } 
+
+    while ($true) {
+
+        $Answer = Read-Host $Dialog.Question
+
+        if ($Answer -eq "y") {
+            Show-Information -InformationText $Dialog.YesResponse
+            $ReturnValue = 0
+        }
+        elseif ($Answer -eq "n") {
+            Show-Information -InformationText $Dialog.NoResponse
+            $ReturnValue = 1
+        }
+        else {
+            Write-Information -MessageData "`nPlease enter [y] or [n].`n" -InformationAction Continue
+        }
+
+        if ($ReturnValue -le 1) {
+            if ($ReturnValue -eq 0) {
+                $UserResponse = "y"
+            }
+            elseif ($ReturnValue -eq 1) {
+                $UserResponse = "n"
+            }
+
+            return $UserResponse
+        }
+    }
+}
+
+
 function Read-Settings{
 
     Param(
@@ -120,22 +183,10 @@ function Write-Settings{
                 $SettingsTemplate_Hst.$Key[$i] | Out-File -FilePath $Path -Encoding unicode -Append
             }
         }
-
     }
 }
 
-function Show-Information{
 
-    Param(
-        [Parameter(Mandatory)]
-        [string[]]$InformationText
-    )
-
-    for($i = 0; $i -le ($InformationText.length -1); $i++){
-        Write-Information -MessageData $InformationText[$i] -InformationAction Continue
-    }
-
-}
 
 function Backup-Settings{
     <# 
@@ -338,7 +389,6 @@ function Initialize-Script{
                         $InitializeScript_ExitCode = 4
 
                         Write-Information -MessageData "Error: Couldn't import SettingsArchive.xml"
-                        
                     }
                     
                     ### CONDITION: Known LibraryName
@@ -385,7 +435,7 @@ function Initialize-Script{
 
                                     Restore-Settings -Target $PathsProgram.Settings -Source $PathsProgram.Tmp
 
-                                    Write-Information -MessageData "Script aborted."
+                                    Write-Information -MessageData "Exiting..."
                                     
                                     break
                                 }
@@ -394,7 +444,8 @@ function Initialize-Script{
                                 }
                             }
                         }
-                        
+
+
                         ### SUB-CONDITION: Same Target but different Source.
                         ### ACTION: Update Library.
 
@@ -614,4 +665,4 @@ function Start-Script{
     return $StartScript_ExitCode
 }
 
-Export-ModuleMember -Function Initialize-Script,Confirm-Settings,Start-Script,Restore-Settings,Resume-OnError -Variable InitializeScript_ExitCode,ConfirmSettings_ExitCode,StartScript_ExitCode,ResumeExitCode
+Export-ModuleMember -Function Initialize-Script,Confirm-Settings,Start-Script,Restore-Settings,Resume-OnError,Show-Information,Get-UserInput -Variable InitializeScript_ExitCode,ConfirmSettings_ExitCode,StartScript_ExitCode,ResumeExitCode,UserResponse

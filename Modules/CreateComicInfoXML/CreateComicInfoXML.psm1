@@ -18,7 +18,7 @@ function New-ComicInfoFile{
             $Target = $Path
         }
         else {
-            $Target = $ObjectMeta.ObjectTarget
+            $Target = $ObjectMeta.ObjectTarget # < No longer relevant
         }
 
         [string]$PublishingType = $ObjectMeta.PublishingType
@@ -53,7 +53,7 @@ function New-ComicInfoFile{
                 $XmlObjectWriter.WriteElementString("Tags", ($ObjectMeta.Tags))
                 $XmlObjectWriter.WriteElementString("Format", ($ObjectMeta.Format))
                 $XmlObjectWriter.WriteElementString("SeriesGroup", ($ObjectMeta.PublishingType)) # Kavita creates groups by the SeriesGroup tag Grouping by PublishingType
-                $XmlObjectWriter.WriteElementString("Manga", "Yes")
+                $XmlObjectWriter.WriteElementString("Manga", "Manga")
           
             $XmlObjectWriter.WriteEndElement() # <-- End BaseSettings 
          
@@ -87,7 +87,7 @@ function New-ComicInfoFile{
                 $XmlObjectWriter.WriteElementString("Tags", ($ObjectMeta.Tags))
                 $XmlObjectWriter.WriteElementString("Format", ($ObjectMeta.Format))
                 $XmlObjectWriter.WriteElementString("SeriesGroup", ($ObjectMeta.SeriesGroup)) # Kavita creates groups by the SeriesGroup tag, we want to group by artists
-                $XmlObjectWriter.WriteElementString("Manga", "Yes")
+                $XmlObjectWriter.WriteElementString("Manga", "Manga")
          
          
             $XmlObjectWriter.WriteEndElement() 
@@ -122,7 +122,7 @@ function New-ComicInfoFile{
                 $XmlObjectWriter.WriteElementString("Tags", ($ObjectMeta.Tags))
                 $XmlObjectWriter.WriteElementString("Format", ($ObjectMeta.Format)) # Set format to One-Shot (for now...)
                 $XmlObjectWriter.WriteElementString("SeriesGroup", ($ObjectMeta.Convention)) # Group by ConventionName
-                $XmlObjectWriter.WriteElementString("Manga", "Yes")
+                $XmlObjectWriter.WriteElementString("Manga", "Manga")
           
             $XmlObjectWriter.WriteEndElement()
          

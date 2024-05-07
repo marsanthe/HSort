@@ -23,7 +23,7 @@ Import-Module -Name "$Directory\Modules\InitializeScript\InitializeScript.psm1"
 
 $SourceDir = "$HOME\AppData\Roaming\HSort\SkippedObjects"
 
-Show-Information -InformationText ("INFORMATION",
+Show-Information -InformationArray ("INFORMATION",
         "==========================","This script is meant to be run after a Library was created from a Source-folder.",
 "If objects from this Source-folder were skipped, this script will MOVE them to a folder of your choice and sort them.",
 "This helps you to get an overview over Objects that you might want to add to the library manually,",
@@ -35,132 +35,135 @@ $UserInput = Get-UserInput -Dialog @{
     "NoResponse" = "Exiting"
 }
 
-if($UserInput -eq "y"){
-  
-    $LibraryName = Read-Host "Please enter the name of the library."
-    
-    try {
-        $SkippedXML = Import-Clixml -Path "$SourceDir\Skipped $LibraryName.xml"
-    }
-    catch {
-        Write-Output "$SourceDir\Skipped $LibraryName.xml not found. Exiting"
-        exit
-    }
-            
-    $TargetDir = Read-Host "`nWhere would you like to save the folder containing the skipped objects?`n"
+if ($UserInput -eq "n"){
+    exit
+}
 
-    while ($True) {
-        if (!(Test-Path $TargetDir)) {
-            $TargetDir = Read-Host "This directory doesn't exist. Please enter a different path."
+
+$LibraryName = Read-Host "Please enter the name of the library."
+    
+try {
+    $SkippedXML = Import-Clixml -Path "$SourceDir\Skipped $LibraryName.xml"
+}
+catch {
+    Write-Information "$SourceDir\Skipped $LibraryName.xml not found. Exiting"
+    exit
+}
+        
+$TargetDir = Read-Host "`nWhere would you like to save the folder containing the skipped objects?`n"
+
+while ($True) {
+    if (!(Test-Path $TargetDir)) {
+        $TargetDir = Read-Host "This directory doesn't exist. Please enter a different path."
+    }
+    elseif (Test-Path "$TargetDir\Skipped $LibraryName") {
+        $TargetDir = Read-Host "This directory already contains a folder named: Skipped $LibraryName. Please enter a different path."
+    }
+    else{
+        break
+    }
+}
+
+
+$PathsSkipped = [ordered]@{
+    "Base"         = "$TargetDir\Skipped $LibraryName";
+    "NoMatch"      = "$TargetDir\Skipped $LibraryName\NoMatch";
+    "Duplicates"   = "$TargetDir\Skipped $LibraryName\Duplicates";
+    "HashMismatch" = "$TargetDir\Skipped $LibraryName\HashMismatch";
+    "Other"      = "$TargetDir\Skipped $LibraryName\Other"
+}
+
+
+foreach ($Path in $PathsSkipped.Keys) {
+    if (!(Test-Path $PathsSkipped.$Path)) {
+        $null = New-Item -ItemType "directory" -Path $PathsSkipped.$Path
+    }
+}
+
+$DuplicateCounter = 0
+$MovedObjects = [List[object]]::new()
+
+Show-Information -InformationArray ("Please wait. Moving objects...`n")
+
+foreach($Reason in $SkippedXML.Keys){
+
+    foreach($Object in $SkippedXML.$Reason.Keys){
+
+        $Source = $SkippedXML.$Reason.$Object.Path
+        $Name = $SkippedXML.$Reason.$Object.ObjectName
+        $ParentDir = $SkippedXML.$Reason.$Object.ObjectParent
+
+        Write-Information -MessageData "[Moving] $Name" -InformationAction Continue
+
+        # Since an object can have more than one duplicate,
+        # we have to make sure that every object moved to the duplicates
+        # folder has a unique name
+        if ($SkippedXML.$Reason.$Object.Reason -eq "Duplicate") {
+            $DuplicateCounter += 1
         }
-        elseif (Test-Path "$TargetDir\Skipped $LibraryName") {
-            $TargetDir = Read-Host "This directory already contains a folder named: Skipped $LibraryName. Please enter a different path."
+
+        if($SkippedXML.$Reason.$Object.Extension -eq "Folder") {
+
+            switch(($SkippedXML.$Reason.$Object.Reason)){
+
+                "NoMatch" {
+                            try{$null = robocopy $Source "$($PathsSkipped.NoMatch)\$Name" /E /DCOPY:DAT /move ; $MovedObjects.Add()}
+                            catch {Write-Information "Copy error" -InformationAction Continue};
+                            break }
+                
+
+                "Duplicate" {
+                            try { $null = robocopy $Source "$($PathsSkipped.Duplicates)\$Name" /E /DCOPY:DAT /Move;
+                            Rename-Item -LiteralPath "$($PathsSkipped.Duplicates)\$Name" -NewName "ID $DuplicateCounter $Name" }
+                            catch {Write-Information "Copy error" -InformationAction Continue};
+                            break }
+
+                "HashMismatch" {
+                            try{$null = robocopy $Source "$($PathsSkipped.HashMismatch)\$Name" /E /DCOPY:DAT /move}
+                            catch {Write-Information "Copy error" -InformationAction Continue};
+                            break }
+                
+                # Only move Junk-Objects from this type of folder, but don't move folder itself.
+                "UnsupportedOrMixedContent" {break}
+
+                Default { 
+                            try{$null = robocopy $Source "$($PathsSkipped.Other)\$Name" /E /DCOPY:DAT /move}
+                            catch {Write-Information "Copy error" -InformationAction Continue};
+                            break }
+            }
         }
         else{
-            break
-        }
-    }
-    
- 
-    $PathsSkipped = [ordered]@{
-        "Base"         = "$TargetDir\Skipped $LibraryName";
-        "NoMatch"      = "$TargetDir\Skipped $LibraryName\NoMatch";
-        "Duplicates"   = "$TargetDir\Skipped $LibraryName\Duplicates";
-        "HashMismatch" = "$TargetDir\Skipped $LibraryName\HashMismatch";
-        "Other"      = "$TargetDir\Skipped $LibraryName\Other"
-    }
-    
 
-    foreach ($Path in $PathsSkipped.Keys) {
-        if (!(Test-Path $PathsSkipped.$Path)) {
-            $null = New-Item -ItemType "directory" -Path $PathsSkipped.$Path
-        }
-    }
-    
-    $DuplicateCounter = 0
-    
-    Show-Information -InformationText ("Please wait. Copying objects...`n")
+            switch(($SkippedXML.$Reason.$Object.Reason)){
 
-    foreach($Reason in $SkippedXML.Keys){
-    
-        foreach($Object in $SkippedXML.$Reason.Keys){
-    
-            $Source = $SkippedXML.$Reason.$Object.Path
-            $Name = $SkippedXML.$Reason.$Object.ObjectName
-            $ParentDir = $SkippedXML.$Reason.$Object.ObjectParent
+                "NoMatch" {
+                            try{ $null = robocopy $ParentDir $PathsSkipped.NoMatch $Name /move}
+                            catch { Write-Information "Copy error" -InformationAction Continue};
+                            break }
 
-            Write-Information -MessageData "[Copying] $Name" -InformationAction Continue
-    
-            # Since an object can have more than one duplicate,
-            # we have to make sure that every object moved to the duplicates
-            # folder has a unique name
-            if ($SkippedXML.$Reason.$Object.Reason -eq "Duplicate") {
-                $DuplicateCounter += 1
-            }
-    
-            if($SkippedXML.$Reason.$Object.Extension -eq "Folder") {
-    
-                switch(($SkippedXML.$Reason.$Object.Reason)){
-    
-                    "NoMatch" {
-                                try{$null = robocopy $Source "$($PathsSkipped.NoMatch)\$Name" /E /DCOPY:DAT /move}
-                                catch {Write-Output "Copy error"};
-                                break }
-                    
-    
-                    "Duplicate" {
-                                try { $null = robocopy $Source "$($PathsSkipped.Duplicates)\$Name" /E /DCOPY:DAT /Move;
-                                Rename-Item -LiteralPath "$($PathsSkipped.Duplicates)\$Name" -NewName "ID $DuplicateCounter $Name" }
-                                catch {Write-Output "Copy error"};
-                                break }
-    
-                    "HashMismatch" {
-                                try{$null = robocopy $Source "$($PathsSkipped.HashMismatch)\$Name" /E /DCOPY:DAT /move}
-                                catch {Write-Output "Copy error"};
-                                break }
-                    
-                    # Only move Junk-Objects from this type of folder, but don't move folder itself.
-                    "UnsupportedOrMixedContent" {break}
-    
-                    Default { 
-                                try{$null = robocopy $Source "$($PathsSkipped.Other)\$Name" /E /DCOPY:DAT /move}
-                                catch {Write-Output "Copy error"};
-                                break }
-                }
-            }
-            else{
-    
-                switch(($SkippedXML.$Reason.$Object.Reason)){
-    
-                    "NoMatch" {
-                                try{ $null = robocopy $ParentDir $PathsSkipped.NoMatch $Name /move}
-                                catch { Write-Output "Copy error" };
-                                break }
-    
-                    # LiteralPath is neccessary
-                    # "$Name ID:$DuplicateCounter" doesn't work
-                    # $Name has to be at the end, since we need the extension from $Name
-                    "Duplicate" {
-                                try{$null = robocopy $ParentDir $PathsSkipped.Duplicates $Name /move;
-                                Rename-Item -LiteralPath "$($PathsSkipped.Duplicates)\$Name" -NewName "ID $DuplicateCounter $Name" }
-                                catch {Write-Output "Copy error"};
-                                break }
-    
-    
-                    "HashMismatch" {
-                                try{$null = robocopy $ParentDir $PathsSkipped.HashMismatch $Name /move}
-                                catch {Write-Output "Copy error"};
-                                break }
-    
-                    Default {
-                                try{$null = robocopy $ParentDir $PathsSkipped.Other $Name /move}
-                                catch {Write-Output "Copy error"};
-                                break }
-    
-                }
+                # LiteralPath is neccessary
+                # "$Name ID:$DuplicateCounter" doesn't work
+                # $Name has to be at the end, since we need the extension from $Name
+                "Duplicate" {
+                            try{$null = robocopy $ParentDir $PathsSkipped.Duplicates $Name /move;
+                            Rename-Item -LiteralPath "$($PathsSkipped.Duplicates)\$Name" -NewName "ID $DuplicateCounter $Name" }
+                            catch {Write-Information "Copy error" -InformationAction Continue};
+                            break }
+
+
+                "HashMismatch" {
+                            try{$null = robocopy $ParentDir $PathsSkipped.HashMismatch $Name /move}
+                            catch {Write-Information "Copy error"} -InformationAction Continue;
+                            break }
+
+                Default {
+                            try{$null = robocopy $ParentDir $PathsSkipped.Other $Name /move}
+                            catch {Write-Information "Copy error"} -InformationAction Continue;
+                            break }
+
             }
         }
     }
-    Write-Information -MessageData "`nFinished copying."
 }
+Write-Information -MessageData "`nFinished moving objects."
 

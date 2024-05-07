@@ -7,12 +7,12 @@ function Show-Information {
     Param(
         [Parameter(Mandatory)]
         #[AllowEmptyString()]
-        [string[]]$InformationText
+        [string[]]$InformationArray
     )
 
-    if($InformationText){
-        for ($i = 0; $i -le ($InformationText.length - 1); $i++) {
-            Write-Information -MessageData $InformationText[$i] -InformationAction Continue
+    if($InformationArray){
+        for ($i = 0; $i -le ($InformationArray.length - 1); $i++) {
+            Write-Information -MessageData $InformationArray[$i] -InformationAction Continue
         }
     }
     else{
@@ -32,7 +32,7 @@ function Get-UserInput {
     $UserResponse = ""
 
     if ($Dialog.Intro) {
-        Show-Information -InformationText $Dialog.Intro
+        Show-Information -InformationArray $Dialog.Intro
     } 
 
     while ($true) {
@@ -40,11 +40,11 @@ function Get-UserInput {
         $Answer = Read-Host $Dialog.Question
 
         if ($Answer -eq "y") {
-            Show-Information -InformationText $Dialog.YesResponse
+            Show-Information -InformationArray $Dialog.YesResponse
             $ReturnValue = 0
         }
         elseif ($Answer -eq "n") {
-            Show-Information -InformationText $Dialog.NoResponse
+            Show-Information -InformationArray $Dialog.NoResponse
             $ReturnValue = 1
         }
         else {
@@ -114,7 +114,7 @@ function Read-Settings{
 
             elseif($line -match "(?<Argument>^\w+) += *$"){
 
-                Show-Information -InformationText ("Warning",
+                Show-Information -InformationArray ("Warning",
                                                     "==========================",
                                                     " ",
                                                     "Settings.txt is incomplete.",
@@ -286,7 +286,7 @@ function Initialize-Script{
         # Populate Settings-file
         Write-Settings -ScriptVersion $ScriptVersion -Path $PathsProgram.TxtSettings
 
-        Show-Information -InformationText  ("INFORMATION",
+        Show-Information -InformationArray  ("INFORMATION",
         "==========================",
         " ",
         "This seems to be the first time you run this script.",
@@ -322,7 +322,7 @@ function Initialize-Script{
 
             $InitializeScript_ExitCode = 2
     
-            Show-Information -InformationText ("Warning",
+            Show-Information -InformationArray ("Warning",
             "==========================",
             " ",
             "Settings file (Settings.txt) not found.",
@@ -357,7 +357,7 @@ function Initialize-Script{
                 $CurrentSource = $CurrentSettings.Source
 
                 # Display current settings.
-                Show-Information -InformationText ("YOUR SETTINGS",
+                Show-Information -InformationArray ("YOUR SETTINGS",
                 "==========================",
                 " ",
                 "ScriptVersion: $($CurrentSettings.ScriptVersion)",
@@ -395,14 +395,14 @@ function Initialize-Script{
 
                     if($SettingsArchive.ContainsKey($CurrentName)){
                         
-                        Show-Information -InformationText ("SettingsArchive.xml contains CurrentName: $CurrentName`n")
+                        Show-Information -InformationArray ("SettingsArchive.xml contains CurrentName: $CurrentName`n")
     
                         ### SUB-CONDITION: Different Target.
                         ### ACTION: Special
 
                         if($SettingsArchive.$CurrentName.Target -ne $CurrentParentDir){
     
-                            Show-Information -InformationText ("WARNING",
+                            Show-Information -InformationArray ("WARNING",
                             "==========================",
                              " ",
                             "A library of this name already exists in a different location.")
@@ -415,7 +415,7 @@ function Initialize-Script{
                                     
                                     $InitializeScript_ExitCode = 5
 
-                                    Show-Information -InformationText ( "Please copy or move the library folder to the desired location.",
+                                    Show-Information -InformationArray ( "Please copy or move the library folder to the desired location.",
                                     "Then run the script again.`n")
     
                                     # Update library-information
@@ -454,7 +454,7 @@ function Initialize-Script{
                             # ExitCode = -2 <=> Library is in SettingsArchive <?> LibraryContent_LibraryName.xml exists
                             $InitializeScript_ExitCode = -2
                             
-                            Show-Information -InformationText ("Updating Library: $CurrentName`n", "From new Source: $CurrentSource")
+                            Show-Information -InformationArray ("Updating Library: $CurrentName`n", "From new Source: $CurrentSource")
 
                             $SettingsArchive.$CurrentName.Source = $CurrentSource
     
@@ -470,9 +470,9 @@ function Initialize-Script{
 
                         elseif($SettingsArchive.$CurrentName.Source -eq $CurrentSource){
 
-                            $InitializeScript_ExitCode = -2
+                            $InitializeScript_ExitCode = -3
 
-                            Show-Information -InformationText ("Updating Library: $CurrentName`n", "From Source: $CurrentSource")
+                            Show-Information -InformationArray ("Updating Library: $CurrentName`n", "From Source: $CurrentSource")
 
                             # The only thing that could have changed is the script version.
                             $SettingsArchive | Export-Clixml -LiteralPath "$($PathsProgram.Settings)\SettingsArchive.xml" -Force
@@ -590,7 +590,7 @@ function Confirm-Settings{
                 else{
                     $ConfirmSettings_ExitCode = 1
 
-                    Show-Information -InformationText("Error",
+                    Show-Information -InformationArray("Error",
                         "==========================",
                         " ",
                         "Source and target must be different directories.")
@@ -600,7 +600,7 @@ function Confirm-Settings{
 
                 $ConfirmSettings_ExitCode = 1
 
-                Show-Information -InformationText("Error",
+                Show-Information -InformationArray("Error",
                 "==========================",
                 " ",
                 "Invalid Source",
@@ -613,7 +613,7 @@ function Confirm-Settings{
 
             $ConfirmSettings_ExitCode = 1
 
-            Show-Information -InformationText ("Error",
+            Show-Information -InformationArray ("Error",
             "==========================",
             " ",
             "Invalid Target",
@@ -626,7 +626,7 @@ function Confirm-Settings{
 
         $ConfirmSettings_ExitCode = 1
 
-        Show-Information -InformationText("Error",
+        Show-Information -InformationArray("Error",
             "==========================",
             " ",
             "Bad LibraryName",

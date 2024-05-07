@@ -16,9 +16,8 @@ function Add-LogEntry{
 
     $Item_Log = [PSCustomObject]@{
 
-        #Extension = "{0}" -f ($ObjectProperties.Extension)
         Source = "{0}" -f ($ObjectProperties.ObjectSource)
-        Target           = "{0}" -f "$($ObjectProperties.ObjectTarget)\$($ObjectProperties.ObjectNewName)$($ObjectProperties.NewExtension)"
+        Target           = "{0}" -f "$($ObjectProperties.ObjectTarget)\$($ObjectProperties.TargetName)$($ObjectProperties.NewExtension)"
         OriginalFileHash = "{0}" -f ($ObjectProperties.SourceHash)
         CopiedFileHash = "{0}" -f ($ObjectProperties.TargetHash)
 

@@ -1,56 +1,48 @@
 
-function New-ObjectName {
+function New-TargetName {
     <#
     .INPUTS
         Array of sanitized and normalized tokens.
     .OUTPUTS
-        NewObjectName as String
-        The file name of any object stored in Library.
-    .DESCRIPTION
-        Put everything except the title in parenthesis.
-    .PARAMETER
+        TargetName (== Title)
     #>
 
     Param(
         [Parameter(Mandatory)]
-        [array]$ObjectNameArray
+        [array]$NameArray
     )
 
-    $NewObName = ""
+    $TargetName = $NameArray[3]
+    $TargetName = $TargetName.trim()
 
-    for ($i = 1; $i -le ($ObjectNameArray.length - 1); $i += 1) {
-
-        $Token = $ObjectNameArray[$i]
-
-        if ($Token -ne "") {
-
-            if ($i -eq 1) {
-                $Token = "($Token)"
-            }
-            # If token is Artist
-            elseif ($i -eq 2) {
-                $Token = "($Token)"
-            }
-            elseif ($i -eq 4) {
-                $Token = "($Token)"
-            }
-
-        }
-
-        if ($NewObName -eq "") {
-            $NewObName += $Token
-        }
-
-        # Add space between Tokens
-        else {
-            $NewObName += " $Token"
-        }
-    }
-
-    $NewObName = $NewObName.trim()
-
-    return $NewObName
+    return $TargetName
 }
+
+function New-Id {
+    <#
+    .INPUTS
+        Array of sanitized and normalized tokens.
+    .OUTPUTS
+        Id as string
+    .DESCRIPTION
+        Converts the sanitized $NameArray back to a string.
+        The SHA1 of this string is the key of each object in UserLibrary
+        [Collection -> Title -> SHA1(Id)]
+    #>
+
+    Param(
+        [Parameter(Mandatory)]
+        [array]$NameArray
+    )
+
+    $Id = [system.String]::Join(" ", $NameArray)
+
+    $Id = $Id.trim()
+
+    return $Id
+}
+
+
 function Select-Collection {
     <# 
     .OUTPUTS
@@ -71,20 +63,20 @@ function Select-Collection {
 
     Param(
         [Parameter(Mandatory)]
-        [array]$ObjectNameArray
+        [array]$NameArray
     )
 
-    if ($ObjectNameArray[0] -eq "Anthology") {
+    if ($NameArray[0] -eq "Anthology") {
         $Collection = "Anthology"
     }
     
-    elseif ($ObjectNameArray[0] -eq "Manga") {
-        $Collection = "$($ObjectNameArray[2])"
+    elseif ($NameArray[0] -eq "Manga") {
+        $Collection = "$($NameArray[2])"
     }
     
-    elseif ($ObjectNameArray[0] -eq "Doujinshi") {
+    elseif ($NameArray[0] -eq "Doujinshi") {
 
-        $Collection = "$($ObjectNameArray[1])"
+        $Collection = "$($NameArray[1])"
 
     }
 
@@ -194,15 +186,9 @@ function Select-Tags {
 
     Param(
 
-        [array]$ObjectNameArray,
+        [array]$NameArray,
         
         [hashtable]$TagsHt
-
-        #[AllowEmptyString()]
-        #[string]$MetaTokenString
-
-
-        #[string]$Title,
 
     )
 
@@ -210,7 +196,7 @@ function Select-Tags {
 
     ### Select Tags from Title ###
 
-    $Title = $ObjectNameArray[3]
+    $Title = $NameArray[3]
     
     $Title = $Title.ToLower()
     $TitleTokenSet = [System.Collections.Generic.HashSet[String]] @(($Title.Split(" ")))
@@ -227,7 +213,7 @@ function Select-Tags {
 
     ### Select Tags from Meta ###
 
-    $MetaTokenString = $ObjectNameArray[4]
+    $MetaTokenString = $NameArray[4]
 
     if ($MetaTokenString -ne "") {
         
@@ -270,7 +256,7 @@ function Write-Meta {
 
     Param(
         [Parameter(Mandatory)]
-        [array]$ObjectNameArray,
+        [array]$NameArray,
 
         [Parameter(Mandatory)]
         [string]$CreationDate,
@@ -279,15 +265,15 @@ function Write-Meta {
         [hashtable]$TagsHT
     )
 
-    $PublishingType = $ObjectNameArray[0]
-    $Convention = $ObjectNameArray[1] # Empty string if Object is not Doujinshi.
-    $Artist = $ObjectNameArray[2] # Artist is "Anthology" for Anthologies.
-    $Title = $ObjectNameArray[3]
+    $PublishingType = $NameArray[0]
+    $Convention     = $NameArray[1] # Empty string if Object is not Doujinshi.
+    $Artist         = $NameArray[2] # Artist is "Anthology" for Anthologies.
+    $Title          = $NameArray[3]
 
     $DateArray = $CreationDate.split("-")
     $yyyy = $DateArray[0]; $MM = $DateArray[1]
 
-    $TagsCSV = Select-Tags -ObjectNameArray $ObjectNameArray -TagsHt $TagsHt
+    $TagsCSV = Select-Tags -NameArray $NameArray -TagsHt $TagsHt
 
     switch ($PublishingType) {
 
@@ -328,7 +314,7 @@ function Write-Properties {
         [Object]$Object,
 
         [Parameter(Mandatory)]
-        [string]$NewName,
+        [string]$TargetName,
 
         [Parameter(Mandatory)]
         [array]$NameArray,
@@ -391,9 +377,10 @@ function Write-Properties {
 
     }
 
+
     return @{
         ObjectSource  = ($Object.FullName);
-        ObjectNewName = $NewName;
+        TargetName = $TargetName;
         ObjectName    = $Object.Name;
         Extension     = $Ext; # Required to check if Object is file or folder in COPY
         NewExtension  = $NewExtension;
@@ -420,38 +407,30 @@ function New-Selector {
         [array]$NameArray,
 
         [Parameter(Mandatory)]
-        [string]$NewName,
+        [string]$RefID,
 
-        [string]$VariantName
+        [Parameter(Mandatory)]
+        [string]$TargetName
     )
 
-    begin {
-
-        if ($PSBoundParameters.ContainsKey('VariantName')) {
-            $VariantObjectName = $VariantName
-        }
-        else {
-            $VariantObjectName = ""
-        }
-    }
 
     process {
 
         $PublishingType = $NameArray[0]
-        $Convention = $NameArray[1]
-        $Artist = $NameArray[2]
-        $Title = $NameArray[3]
+        $Artist         = $NameArray[2]
+        $Convention     = $NameArray[1]
+        $Title          = $NameArray[3]
         
         return @{
             "PublishingType"    = $PublishingType
             "Artist"            = $Artist
             "Convention"        = $Convention
             "Title"             = $Title
-            "VariantObjectName" = $VariantObjectName
-            "NewName"           = $NewName
+            "TargetName"        = $TargetName
+            "RefID"             = $RefID
         }
 
     }
 }
 
-Export-ModuleMember -Function New-ObjectName,Select-Collection,Convert-ListToString,Import-Tags,Select-Tags,Write-Meta,Write-Properties,New-Selector -Variable Name,Collection,String,TagsCSV,TagsHt
+Export-ModuleMember -Function New-Id,New-TargetName, Select-Collection, Convert-ListToString, Import-Tags, Select-Tags, Write-Meta, Write-Properties, New-Selector -Variable Id,TargetName, Collection, String, TagsCSV,TagsHt

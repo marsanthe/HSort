@@ -407,7 +407,7 @@ function New-Selector {
         [array]$NameArray,
 
         [Parameter(Mandatory)]
-        [string]$RefID,
+        [string]$HashedID,
 
         [Parameter(Mandatory)]
         [string]$TargetName
@@ -427,7 +427,7 @@ function New-Selector {
             "Convention"        = $Convention
             "Title"             = $Title
             "TargetName"        = $TargetName
-            "RefID"             = $RefID
+            "HashedID"             = $HashedID
         }
 
     }

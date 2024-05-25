@@ -1,97 +1,134 @@
-$LogModuleTimestamp = Get-Date -Format "dd_MM_yyyy"
-
-function Add-LogEntry{
-
+function New-Header{
     Param(
         [Parameter(Mandatory)]
-        [hashtable]$ObjectProperties,
+        [string]$Name,
 
         [Parameter(Mandatory)]
-        [string]$Path
+        [string]$FilePath,
 
+        [switch]$Subheader
     )
 
-    # We don't do "$Item_Log = [pscustomobject]$ObjectProperties"
-    # since we want to preserve the order of the properties.
+    if(! $Subheader){
 
-    $Item_Log = [PSCustomObject]@{
+$Header = @"
 
-        Source = "{0}" -f ($ObjectProperties.ObjectSource)
-        Target           = "{0}" -f "$($ObjectProperties.ObjectTarget)\$($ObjectProperties.TargetName)$($ObjectProperties.NewExtension)"
-        OriginalFileHash = "{0}" -f ($ObjectProperties.SourceHash)
-        CopiedFileHash = "{0}" -f ($ObjectProperties.TargetHash)
 
+$Name [$Timestamp]
+=================================================
+
+"@
+    }
+    else{
+$Header = @"
+
+
+$Name
+=================================================
+
+"@        
     }
 
-    #Calculated properties of an Item_Log object
-
-    <#
-        .source
-        https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_calculated_properties?view=powershell-7.4
-
-        expression - A string or script block used to calculate the value of the new property.
-
-        >>>If the expression is a string, the value is interpreted as a property name on the input object.<<<
-
-        This is a shorter option than expression = { $_.<PropertyName> }.
-    #>
-
-    # $Property0 = @{
-    # expression = "Extension"
-    # width = 30}
-
-    $Property0 = @{
-    expression = "Source"
-    width = 100}
-
-    $Property1 = @{
-    expression = "Target"
-    width = 100}
-
-    $Property2 = @{
-    expression = "OriginalFileHash"
-    width = 40}
-
-    $Property3 = @{
-    expression = "CopiedFileHash"
-    width = 40}
-
-    $Item_Log | Format-Table -Property $Property0,
-    $Property1,
-    $Property2,
-    $Property3 -Wrap | Out-File -FilePath "$Path\ObjectLog $LogModuleTimestamp.txt" -Encoding unicode -Width 400 -Append -Force
-
+    $Header | Out-File -FilePath $FilePath -Encoding unicode -Width 400 -Append -Force
 
 }
 
-function Add-SkippedLogEntry{
+function Update-CopiedLog{
 
     Param(
         [Parameter(Mandatory)]
-        [hashtable]$SkippedObjectProperties,
+        [hashtable]$ObjectsToCopy,
 
         [Parameter(Mandatory)]
-        [string]$Path
+        [string]$TargetDir
 
-        )
+    )
 
-    $SkippedFilesLog = [PSCustomObject]@{
+    $FilePath = "$TargetDir\ObjectLog.txt"
 
-        Path = "{0}" -f ($SkippedObjectProperties.Path)
-        Reason = "{0}" -f ($SkippedObjectProperties.Reason)
-        Test = "Test"
+    New-Header -Name "Copied Objects" -FilePath $FilePath
+    
+    foreach ($HashedID in $ObjectsToCopy.Keys) {
+
+        $ObjectProperties = $ObjectsToCopy.$HashedID
+
+        # We don't do "$Item_Log = [pscustomobject]$ObjectProperties"
+        # since we want to preserve the order of the properties.
+    
+        $Item_Log = [PSCustomObject]@{
+    
+            Source = "{0}" -f ($ObjectProperties.ObjectSource)
+            Target           = "{0}" -f "$($ObjectProperties.ObjectTarget)\$($ObjectProperties.TargetName)$($ObjectProperties.NewExtension)"
+            OriginalFileHash = "{0}" -f ($ObjectProperties.SourceHash)
+            CopiedFileHash = "{0}" -f ($ObjectProperties.TargetHash)
+    
+        }
+    
+        $Property0 = @{
+        expression = "Source"
+        width = 100}
+    
+        $Property1 = @{
+        expression = "Target"
+        width = 100}
+    
+        $Property2 = @{
+        expression = "OriginalFileHash"
+        width = 40}
+    
+        $Property3 = @{
+        expression = "CopiedFileHash"
+        width = 40}
+    
+        $Item_Log | Format-Table -Property $Property0,
+        $Property1,
+        $Property2,
+        $Property3 -Wrap | Out-File -FilePath $FilePath -Encoding unicode -Width 400 -Append -Force
     }
+}
 
-    $Property0 = @{
-    expression = "Path"
-    width = 160}
+function Update-SkippedLog{
 
-    $Property1 = @{
-    expression = "Reason"
-    width = 60}
+    Param(
+        [Parameter(Mandatory)]
+        [hashtable]$SkippedObjects,
 
-    $SkippedFilesLog | Format-Table -Property $Property0,
-    $Property1 -Wrap | Out-File -FilePath "$Path\SkippedObjects $LogModuleTimestamp.txt" -Encoding unicode -Width 400 -Append -Force
+        [Parameter(Mandatory)]
+        [string]$TargetDir
+
+    )
+
+    $FilePath = "$TargetDir\SkippedObjects.txt"
+
+    New-Header -Name "Skipped Objects" -FilePath $FilePath
+
+    foreach ($Parent in $SkippedObjects.Keys){
+
+        New-Header -Name "Parent Dir: $Parent" -FilePath $FilePath -Subheader
+
+        foreach($Object in $SkippedObjects.$Parent.Keys){
+
+            $SkippedObjectProperties = $SkippedObjects.$Parent.$Object
+
+            $SkippedFilesLog = [PSCustomObject]@{
+        
+                Path = "{0}" -f ($SkippedObjectProperties.Path)
+                Reason = "{0}" -f ($SkippedObjectProperties.Reason)
+
+            }
+        
+            $Property0 = @{
+            expression = "Path"
+            width = 160}
+        
+            $Property1 = @{
+            expression = "Reason"
+            width = 60}
+        
+            $SkippedFilesLog | Format-Table -Property $Property0,
+            $Property1 -Wrap | Out-File -FilePath $FilePath -Encoding unicode -Width 400 -Append -Force
+        }
+    }
 }
 
 function Add-TimingLogEntry{
@@ -125,7 +162,7 @@ function Add-TimingLogEntry{
     width = 20}
 
     $Property1 = @{
-        expression = "Object"
+    expression = "Object"
     width = 180}
 
     $Property2 = @{
@@ -134,5 +171,7 @@ function Add-TimingLogEntry{
 
     $TimingTable | Format-Table -Property $Property0,
     $Property1,
-    $Property2 -Wrap | Out-File -FilePath "$Path\$FileName $LogModuleTimestamp.txt" -Encoding unicode -Width 260 -Append -Force
+    $Property2 -Wrap | Out-File -FilePath "$Path\$Timestamp $FileName.txt" -Encoding unicode -Width 260 -Append -Force
 }
+
+Export-ModuleMember -Function Update-CopiedLog, Update-SkippedLog

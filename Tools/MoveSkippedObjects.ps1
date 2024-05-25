@@ -1,4 +1,6 @@
 
+using namespace System.Collections.Generic
+
 $Directory = Split-Path -Parent(Get-Location) # Parent( (Get-Location == Tools) ) == HSort 
 
 
@@ -11,17 +13,18 @@ Import-Module -Name "$Directory\Modules\InitializeScript\InitializeScript.psm1"
         Move skipped objects to a folder.
     .DESCRIPTION
         Move skipped objects to a folder named "Skipped [LibraryName]".
-        The skipped objects are sorted into different folders depending on
+        The skipped objects are sorted into different sub-folders depending on
         the reason they were skipped.
     .INPUTS
         LibraryName
             The name of the library.
             To move the files that were skipped during the creation of this library.
         TargetDir
-            The Directory to create the folder containing the skipped files in. 
+            The Directory to create "Skipped [LibraryName]" in. 
 #>
 
-$SourceDir = "$HOME\AppData\Roaming\HSort\SkippedObjects"
+$SkippedDir = "$HOME\AppData\Roaming\HSort\SkippedObjects"
+$VisitedDir = "$HOME\AppData\Roaming\HSort\ApplicationData"
 
 Show-Information -InformationArray ("INFORMATION",
         "==========================","This script is meant to be run after a Library was created from a Source-folder.",
@@ -43,10 +46,19 @@ if ($UserInput -eq "n"){
 $LibraryName = Read-Host "Please enter the name of the library."
     
 try {
-    $SkippedXML = Import-Clixml -Path "$SourceDir\Skipped $LibraryName.xml"
+    $SkippedXML = Import-Clixml -Path "$SkippedDir\Skipped $LibraryName.xml"
+    
 }
 catch {
-    Write-Information "$SourceDir\Skipped $LibraryName.xml not found. Exiting"
+    Write-Information "$SkippedDir\Skipped $LibraryName.xml not found. Exiting"
+    exit
+}
+
+try {
+    $VisitedObjects = Import-Clixml -Path "$VisitedDir\VisitedObjects $LibraryName.xml"
+}
+catch {
+    Write-Information "$VisitedDir\VisitedObjects $LibraryName.xml not found. Exiting"
     exit
 }
         
@@ -66,11 +78,11 @@ while ($True) {
 
 
 $PathsSkipped = [ordered]@{
-    "Base"         = "$TargetDir\Skipped $LibraryName";
-    "NoMatch"      = "$TargetDir\Skipped $LibraryName\NoMatch";
-    "Duplicates"   = "$TargetDir\Skipped $LibraryName\Duplicates";
-    "HashMismatch" = "$TargetDir\Skipped $LibraryName\HashMismatch";
-    "Other"      = "$TargetDir\Skipped $LibraryName\Other"
+    "Base"         = "$TargetDir\SkippedObjects from $LibraryName";
+    # "NoMatch"      = "$TargetDir\SkippedObjects from $LibraryName\NoMatch";
+    # "Duplicates"   = "$TargetDir\SkippedObjects from $LibraryName\Duplicates";
+    # "HashMismatch" = "$TargetDir\SkippedObjects from $LibraryName\HashMismatch";
+    # "Other"        = "$TargetDir\SkippedObjects from $LibraryName\Other"
 }
 
 
@@ -80,90 +92,92 @@ foreach ($Path in $PathsSkipped.Keys) {
     }
 }
 
-$DuplicateCounter = 0
+$ErrorCounter = 0
+$TotalMoved = 0
+
 $MovedObjects = [List[object]]::new()
 
 Show-Information -InformationArray ("Please wait. Moving objects...`n")
 
-foreach($Reason in $SkippedXML.Keys){
 
-    foreach($Object in $SkippedXML.$Reason.Keys){
+foreach($Parent in $SkippedXML.Keys){
 
-        $Source = $SkippedXML.$Reason.$Object.Path
-        $Name = $SkippedXML.$Reason.$Object.ObjectName
-        $ParentDir = $SkippedXML.$Reason.$Object.ObjectParent
+    $ParentName = Split-Path -Path $Parent -Leaf
 
+    $null = New-Item -Name $ParentName -ItemType "directory" -Path $PathsSkipped.Base
+
+    $ObjTargetDir = "$($PathsSkipped.Base)\$ParentName"
+
+    foreach ($Object in $SkippedXML.$Parent.Keys) {
+        
+        $Source = $SkippedXML.$Parent.$Object.Path
+        $Name = $SkippedXML.$Parent.$Object.ObjectName # The object name with extension
+        $ParentDir = $SkippedXML.$Parent.$Object.ObjectParent
+        
         Write-Information -MessageData "[Moving] $Name" -InformationAction Continue
 
-        # Since an object can have more than one duplicate,
-        # we have to make sure that every object moved to the duplicates
-        # folder has a unique name
-        if ($SkippedXML.$Reason.$Object.Reason -eq "Duplicate") {
-            $DuplicateCounter += 1
-        }
+        if ($SkippedXML.$Parent.$Object.Extension -eq "Folder") {
 
-        if($SkippedXML.$Reason.$Object.Extension -eq "Folder") {
-
-            switch(($SkippedXML.$Reason.$Object.Reason)){
-
-                "NoMatch" {
-                            try{$null = robocopy $Source "$($PathsSkipped.NoMatch)\$Name" /E /DCOPY:DAT /move ; $MovedObjects.Add()}
-                            catch {Write-Information "Copy error" -InformationAction Continue};
-                            break }
-                
-
-                "Duplicate" {
-                            try { $null = robocopy $Source "$($PathsSkipped.Duplicates)\$Name" /E /DCOPY:DAT /Move;
-                            Rename-Item -LiteralPath "$($PathsSkipped.Duplicates)\$Name" -NewName "ID $DuplicateCounter $Name" }
-                            catch {Write-Information "Copy error" -InformationAction Continue};
-                            break }
-
-                "HashMismatch" {
-                            try{$null = robocopy $Source "$($PathsSkipped.HashMismatch)\$Name" /E /DCOPY:DAT /move}
-                            catch {Write-Information "Copy error" -InformationAction Continue};
-                            break }
-                
-                # Only move Junk-Objects from this type of folder, but don't move folder itself.
-                "UnsupportedOrMixedContent" {break}
-
-                Default { 
-                            try{$null = robocopy $Source "$($PathsSkipped.Other)\$Name" /E /DCOPY:DAT /move}
-                            catch {Write-Information "Copy error" -InformationAction Continue};
-                            break }
+            try{ 
+                $null = robocopy $Source "$ObjTargetDir\$Name" /E /DCOPY:DAT /move
+                $TotalMoved += 1
             }
+            catch {
+                Write-Information "[Error moving] $Name" -InformationAction Continue
+                $ErrorCounter += 1
+                break
+            }
+
+            $VisitedObjects.Remove($Object)
+            $MovedObjects.Add($Object)
+            break 
         }
         else{
-
-            switch(($SkippedXML.$Reason.$Object.Reason)){
-
-                "NoMatch" {
-                            try{ $null = robocopy $ParentDir $PathsSkipped.NoMatch $Name /move}
-                            catch { Write-Information "Copy error" -InformationAction Continue};
-                            break }
-
-                # LiteralPath is neccessary
-                # "$Name ID:$DuplicateCounter" doesn't work
-                # $Name has to be at the end, since we need the extension from $Name
-                "Duplicate" {
-                            try{$null = robocopy $ParentDir $PathsSkipped.Duplicates $Name /move;
-                            Rename-Item -LiteralPath "$($PathsSkipped.Duplicates)\$Name" -NewName "ID $DuplicateCounter $Name" }
-                            catch {Write-Information "Copy error" -InformationAction Continue};
-                            break }
-
-
-                "HashMismatch" {
-                            try{$null = robocopy $ParentDir $PathsSkipped.HashMismatch $Name /move}
-                            catch {Write-Information "Copy error"} -InformationAction Continue;
-                            break }
-
-                Default {
-                            try{$null = robocopy $ParentDir $PathsSkipped.Other $Name /move}
-                            catch {Write-Information "Copy error"} -InformationAction Continue;
-                            break }
-
+                
+            try{
+                $null = robocopy $ParentDir $ObjTargetDir $Name /move
+                $TotalMoved += 1
             }
+            catch {
+                $ErrorCounter += 1
+                Write-Information "[Error moving] $Name" -InformationAction Continue
+                break
+            }
+
+            $VisitedObjects.Remove($Object)
+            $MovedObjects.Add($Object)
+            break 
         }
+
     }
 }
-Write-Information -MessageData "`nFinished moving objects."
 
+
+# Update this instance of the Skipped hashtable |---
+foreach ($Parent in $SkippedXML.Keys) {
+    foreach ($Object in $MovedObjects) {
+        $SkippedXML.$Parent.Remove($Object)
+    }
+}
+
+# ---> Export and overwrite old Skipped hashtable
+$SkippedXML | Export-Clixml -Path "$SkippedDir\Skipped $LibraryName.xml" -Force
+
+$Summary = @"
+
+Finished moving objects
+=================================================
+
+[Based on the last scan of: $LibraryName]
+
+# Total objects moved: $TotalMoved
+=================================================
+
+
+# Errors: $ErrorCounter
+=================================================
+
+"@
+
+$Summary | Out-Host
+$Summary | Out-File -FilePath "$($PathsSkipped.Base)\MovedObjects Log.txt" -Encoding unicode -Force

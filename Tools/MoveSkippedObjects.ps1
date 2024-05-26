@@ -13,8 +13,7 @@ Import-Module -Name "$Directory\Modules\InitializeScript\InitializeScript.psm1"
         Move skipped objects to a folder.
     .DESCRIPTION
         Move skipped objects to a folder named "Skipped [LibraryName]".
-        The skipped objects are sorted into different sub-folders depending on
-        the reason they were skipped.
+        The skipped objects are sorted into different sub-folders named after their parent folder.
     .INPUTS
         LibraryName
             The name of the library.
@@ -26,9 +25,13 @@ Import-Module -Name "$Directory\Modules\InitializeScript\InitializeScript.psm1"
 $SkippedDir = "$HOME\AppData\Roaming\HSort\SkippedObjects"
 $VisitedDir = "$HOME\AppData\Roaming\HSort\ApplicationData"
 
-Show-Information -InformationArray ("INFORMATION",
-        "==========================","This script is meant to be run after a Library was created from a Source-folder.",
-"If objects from this Source-folder were skipped, this script will MOVE them to a folder of your choice and sort them.",
+Show-Information -InformationArray (" ",
+"INFORMATION",
+"==========================",
+"This script is meant to be run after a Library was created from a Source-folder.",
+"If objects from this Source-folder were skipped, this script will MOVE them to a folder named:",
+"SkippedObjects from [YourLibraryName]",
+"Each object is in turn placed into a folder named by the object's parent-folder.",
 "This helps you to get an overview over Objects that you might want to add to the library manually,",
 "(like Manga not following the E-Hentai naming-scheme), or sort otherwise."," ")
 
@@ -43,7 +46,7 @@ if ($UserInput -eq "n"){
 }
 
 
-$LibraryName = Read-Host "Please enter the name of the library."
+$LibraryName = Read-Host "Please enter the name of the library in question"
     
 try {
     $SkippedXML = Import-Clixml -Path "$SkippedDir\Skipped $LibraryName.xml"
@@ -61,8 +64,10 @@ catch {
     Write-Information "$VisitedDir\VisitedObjects $LibraryName.xml not found. Exiting"
     exit
 }
-        
-$TargetDir = Read-Host "`nWhere would you like to save the folder containing the skipped objects?`n"
+
+
+
+$TargetDir = Read-Host "`nWhere would you like to create the SkippedObjects folder?`n"
 
 while ($True) {
     if (!(Test-Path $TargetDir)) {
@@ -92,12 +97,14 @@ foreach ($Path in $PathsSkipped.Keys) {
     }
 }
 
-$ErrorCounter = 0
+
 $TotalMoved = 0
+$TotalMoveError = 0
 
 $MovedObjects = [List[object]]::new()
+$MoveErrorObjects = [List[object]]::new()
 
-Show-Information -InformationArray ("Please wait. Moving objects...`n")
+Show-Information -InformationArray (" ","Please wait. Moving objects..."," ")
 
 
 foreach($Parent in $SkippedXML.Keys){
@@ -109,6 +116,8 @@ foreach($Parent in $SkippedXML.Keys){
     $ObjTargetDir = "$($PathsSkipped.Base)\$ParentName"
 
     foreach ($Object in $SkippedXML.$Parent.Keys) {
+
+        $ErrorFlag = 0
         
         $Source = $SkippedXML.$Parent.$Object.Path
         $Name = $SkippedXML.$Parent.$Object.ObjectName # The object name with extension
@@ -124,31 +133,40 @@ foreach($Parent in $SkippedXML.Keys){
             }
             catch {
                 Write-Information "[Error moving] $Name" -InformationAction Continue
-                $ErrorCounter += 1
-                break
+                $TotalMoveError += 1
+                $ErrorFlag = 1
             }
 
-            $VisitedObjects.Remove($Object)
-            $MovedObjects.Add($Object)
-            break 
+            if($ErrorFlag -eq 0){
+                $VisitedObjects.Remove($Object)
+                $MovedObjects.Add($Object)
+            }
+            else{
+                $MoveErrorObjects.Add($Object)
+            }
+
         }
         else{
-                
+
             try{
                 $null = robocopy $ParentDir $ObjTargetDir $Name /move
                 $TotalMoved += 1
             }
             catch {
-                $ErrorCounter += 1
                 Write-Information "[Error moving] $Name" -InformationAction Continue
-                break
+                $TotalMoveError += 1
+                $ErrorFlag = 1
             }
 
-            $VisitedObjects.Remove($Object)
-            $MovedObjects.Add($Object)
-            break 
-        }
+            if ($ErrorFlag -eq 0) {
+                $VisitedObjects.Remove($Object)
+                $MovedObjects.Add($Object)
+            }
+            else {
+                $MoveErrorObjects.Add($Object)
+            }
 
+        }
     }
 }
 
@@ -163,9 +181,11 @@ foreach ($Parent in $SkippedXML.Keys) {
 # ---> Export and overwrite old Skipped hashtable
 $SkippedXML | Export-Clixml -Path "$SkippedDir\Skipped $LibraryName.xml" -Force
 
-$Summary = @"
+Show-Information -InformationArray (" ", "Finished moving objects", " ")
 
-Finished moving objects
+$Head = @"
+
+Summary of moved Objects
 =================================================
 
 [Based on the last scan of: $LibraryName]
@@ -173,11 +193,27 @@ Finished moving objects
 # Total objects moved: $TotalMoved
 =================================================
 
+"@
 
-# Errors: $ErrorCounter
+$Head | Out-File -FilePath "$($PathsSkipped.Base)\MovedObjects Log.txt" -Encoding unicode -Append -Force
+
+foreach ($Object in $MovedObjects) {
+    $S = "$Object"
+    $S | Out-File -FilePath "$($PathsSkipped.Base)\MovedObjects Log.txt" -Encoding unicode -Append -Force
+}
+
+
+
+$Subhead = @"
+
+# Objects not moved: $TotalMoveError
 =================================================
 
 "@
 
-$Summary | Out-Host
-$Summary | Out-File -FilePath "$($PathsSkipped.Base)\MovedObjects Log.txt" -Encoding unicode -Force
+$Subhead | Out-File -FilePath "$($PathsSkipped.Base)\MovedObjects Log.txt" -Encoding unicode -Append -Force
+
+foreach ($Object in $MoveErrorObjects) {
+    $S = "$Object"
+    $S | Out-File -FilePath "$($PathsSkipped.Base)\MovedObjects Log.txt" -Encoding unicode -Append -Force
+}

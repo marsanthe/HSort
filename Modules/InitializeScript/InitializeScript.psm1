@@ -357,18 +357,16 @@ function Initialize-Script{
                 $CurrentSource = $CurrentSettings.Source
 
                 # Display current settings.
-                Show-Information -InformationArray ("YOUR SETTINGS",
-                "==========================",
-                " ",
-                "ScriptVersion: $($CurrentSettings.ScriptVersion)",
+                Show-Information -InformationArray ("YOUR SETTINGS [ScriptVersion: $($CurrentSettings.ScriptVersion)]",
+                    "=======================================",
                 " ",
                 "LibraryName: $($CurrentSettings.LibraryName)",
                 " ",
-                "Target: $($CurrentSettings.Target)",
+                "Source:      $($CurrentSettings.Source)",
                 " ",
-                "Source: $($CurrentSettings.Source)",
+                "Target:      $($CurrentSettings.Target)",
                 " ",
-                "==========================",
+                    "=======================================",
                 " ") 
     
                 ### CONDITION: CurrentSettings.xml exists.
@@ -552,9 +550,9 @@ function Initialize-Script{
                         # Serialize $Settings_Hst to allow main-script access.
                         $CurrentSettings | Export-Clixml -LiteralPath "$($PathsProgram.Settings)\CurrentSettings.xml" -Force
         
-                        Write-Information -MessageData "SettingsArchive.xml exists: FALSE`n" -InformationAction Continue
-                        Write-Information -MessageData "Creating: SettingsArchive.xml`n" -InformationAction Continue
-                        Write-Information -MessageData "Creating New Library File: $CurrentName`n" -InformationAction Continue
+                        Write-Information -MessageData "SettingsArchive.xml exists: False" -InformationAction Continue
+                        Write-Information -MessageData "[Creating] SettingsArchive.xml" -InformationAction Continue
+                        Write-Information -MessageData "[Creating] $CurrentName`n" -InformationAction Continue
 
                     }
                 }
@@ -572,19 +570,21 @@ function Confirm-Settings{
         [hashtable]$CurrentSettings
     )
 
+    Write-Information -MessageData "Checking Settings.txt:" -InformationAction Continue
+
     $ConfirmSettings_ExitCode = 0
 
     if($CurrentSettings.LibraryName -match "[\w\+\-]+"){
-        Write-Information -MessageData "LibraryName $($CurrentSettings.LibraryName): OK`n" -InformationAction Continue
+        Write-Information -MessageData "LibraryName: [OK]" -InformationAction Continue
 
         if(Test-Path -Path $CurrentSettings.Target){
-            Write-Information -MessageData "Target $($CurrentSettings.Target): OK`n" -InformationAction Continue
+            Write-Information -MessageData "Target: [OK]" -InformationAction Continue
 
             if(Test-Path -Path $CurrentSettings.Source){
 
                 if ($CurrentSettings.Target -ne $CurrentSettings.Source) {
 
-                    Write-Information -MessageData "LibrarySource $($CurrentSettings.Source): OK`n" -InformationAction Continue
+                    Write-Information -MessageData "Source: [OK]`n" -InformationAction Continue
 
                 }
                 else{

@@ -252,11 +252,11 @@ function Add-NoCopy {
     }
 
     if ($SkippedObjects.ContainsKey($ObjectParent)) {
-        $null = $SkippedObjects.$ObjectParent.add("$($Object.FullName)", $SkippedObjectProperties)
+        $null = $SkippedObjects.$ObjectParent.add("$($Object.ObjectSource)", $SkippedObjectProperties)
     }
     else {
         $SkippedObjects[$ObjectParent] = @{}
-        $null = $SkippedObjects.$ObjectParent.add("$($Object.FullName)", $SkippedObjectProperties)
+        $null = $SkippedObjects.$ObjectParent.add("$($Object.ObjectSource)", $SkippedObjectProperties)
     }
 
 
@@ -621,7 +621,8 @@ function Get-Hash {
 
 ### [BEGIN] Main ###
 
-Show-Information -InformationArray (" _ _ _     _                      _          _____ _____         _   ",
+Show-Information -InformationArray (" ",
+" _ _ _     _                      _          _____ _____         _   ",
     "| | | |___| |___ ___ _____ ___   | |_ ___   |  |  |   __|___ ___| |_ ",
     "| | | | -_| |  _| . |     | -_|  |  _| . |  |     |__   | . |  _|  _|",
     "|_____|___|_|___|___|_|_|_|___|  |_| |___|  |__|__|_____|___|_| |_|  `n",

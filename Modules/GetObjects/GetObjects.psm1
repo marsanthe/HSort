@@ -105,7 +105,7 @@ function Get-Objects{
 
     $SkippedObjects = @{}
 
-
+    # CD-Folder
     # A folder that only contains elements of ComicData_Set is called a ComicData/CD-Folder
     # We include .txt in case a CD-folder contains a text-file with additional information.
     $ComicData_Set = [System.Collections.Generic.HashSet[String]] @('.jpg', '.jpeg', '.png', '.txt')

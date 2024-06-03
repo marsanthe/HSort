@@ -63,6 +63,7 @@ Class EventCounter {
         $this.CopyErrors = 0
         $this.Skipped = 0
         $this.CopyGood = 0
+        $this.Collections = 0
     }
 
     [void]AddTitle([string]$PublishingType) {
@@ -121,6 +122,11 @@ Class EventCounter {
 
     [void]ComputeSkipped(){
         $this.Skipped = $this.EFC + $this.CopyErrors
+    }
+
+    [void]ComputeCollections(){
+        # + 1 for anthologies
+        $this.Collections = $this.Artists + $this.Conventions + 1
     }
 
     [void]AddVariant(){
@@ -1280,6 +1286,8 @@ $CopiedObjects | Export-Clixml -Path "$($PathsProgram.Copied)\CopiedObjects $($S
 
 $EventCounter.ComputeSkipped()
 
+$EventCounter.ComputeCollections()
+
 
 Show-Information -InformationArray (" ", "Script finished", " ")
 
@@ -1306,6 +1314,8 @@ SUMMARY [$Timestamp]
 > Successfully Copied Objects: $($EventCounter.CopyGood)
 
 > CopyCompleteness (should be 0): $($EventCounter.ToCopy - $CopyProgress )
+
+> Total number of Collections: $($EventCounter.Collections)
 
 > Found $($EventCounter.Manga) Manga from $($EventCounter.Artists) Artists
 

@@ -63,6 +63,8 @@ function Update-CopiedLog{
             CopiedFileHash = "{0}" -f ($ObjectProperties.TargetHash)
     
         }
+
+        Export-Csv -InputObject $Item_Log -Path "$TargetDir\ObjectLog.csv" -NoTypeInformation -Append
     
         $Property0 = @{
         expression = "Source"

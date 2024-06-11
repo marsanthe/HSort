@@ -19,11 +19,11 @@ Clear-Host
 
 ### [BEGIN] Classes ###
 #
-Class EventCounter {
+Class GenericCounter {
 
     <# 
         .SYNOPSIS
-        Counting events.
+        Counting things.
     #>
 
     [int]$AllObjects
@@ -41,6 +41,7 @@ Class EventCounter {
     [int]$EFC # Excluded From Copying
     [int]$Variants
 
+    [int]$Collections
     [int]$ToCopy
     [int]$CopyGood
     [int]$CopyErrors
@@ -326,13 +327,16 @@ function ConvertTo-SanitizedNameArray {
                 $Token = $Token.ToUpper()
             }
             elseif($i -eq 3){
+
                 # 17/05/2024 
                 # A folder cannot end with a '.'
                 # When you try to create a folder with [New-Item -Name "xxxx."]
                 # a folder is created but '.' is silently removed.
                 # This makes the folder inaccessible since TargetID and the
                 # actual folder name no longer match.
+
                 $Token =  $Token.Trim('.')
+                
             }
             # If token is Meta.
             if ($i -eq 4) {
@@ -652,12 +656,15 @@ $VersionMinor = $PSVersionTable.PSVersion.Minor
 $PSVersion = "$VersionMajor.$VersionMinor"
 
 if ($VersionMajor -lt 5) {
-    Write-Output "This script requires at least Powershell Version 5.1`nExiting Script."
+    Write-Information -MessageData "This script requires at least Powershell Version 5.1`nExiting Script." -InformationAction Continue
     exit
 }
 elseif (($VersionMajor -eq 5) -and ($VersionMinor -lt 1)) {
-    Write-Output "This script requires at least Powershell Version 5.1`nExiting Script."
+    Write-Information -MessageData "This script requires at least Powershell Version 5.1`nExiting Script." -InformationAction Continue
     exit
+}
+else{
+    Write-Information -MessageData "PSVersion: [OK]" -InformationAction Continue
 }
 #
 ### [END] Assert-PSVersion >= 5.1 ###
@@ -699,10 +706,59 @@ else{
     }        
 }
 
+<# 
+# If 64-bit OS
+# Check if 64-bit 7Zip is installed 
+# if not check if 32-bit 7Zip is installed (on 64-bit OS)
+if([System.Environment]::Is64BitOperatingSystem){
+
+    $64BitApps = Get-ItemProperty "HKLM:\$64BitPath"
+
+    foreach($App in $64BitApps){
+        $AppName = "$(App.DisplayName)"
+        if($AppName.StartsWith("7-Zip")){
+            $SevenZip64 = $App
+            $App64Found = $True
+            break
+        }
+    }
+    if($App64Found -eq $False){
+
+        $32BitApps = Get-ItemProperty "HKLM:\$32BitPath"
+
+        foreach($App in $32BitApps){
+            $AppName = "$(App.DisplayName)"
+            if($AppName.StartsWith("7-Zip")){
+                $SevenZip32 = $App
+                $App32Found = $True
+                break
+            }
+        }      
+    }
+}
+# If 32-bit OS
+# Check if 32-bit 7Zip is installed 
+else{
+
+    $32BitApps = Get-ItemProperty "HKLM:\$32BitPath"
+
+    foreach($App in $32BitApps){
+        $AppName = "$(App.DisplayName)"
+        if($AppName.StartsWith("7-Zip")){
+            $SevenZip32 = $App
+            $App32Found = $True
+            break
+        }
+    }        
+}
+#>
+
 if($App64Found -eq $true){
+    Write-Information -MessageData "7-Zip: [OK]" -InformationAction Continue
     $SevenZipPath = $SevenZip64.InstallLocation
 }
 elseif($App32Found -eq $true){
+    Write-Information -MessageData "7-Zip: [OK]" -InformationAction Continue
     $SevenZipPath = $SevenZip32.InstallLocation
 }
 else{
@@ -831,10 +887,10 @@ $BadFolderCounter = $FoundObjectsHt.BadFolderCounter
 
 $WrongExtensionCounter = $FoundObjectsHt.WrongExtensionCounter
 
-$EventCounter = [EventCounter]::New()
-$EventCounter.ToSort = ($ToProcessLst.Count)
-$EventCounter.EFC = ($BadFolderCounter + $WrongExtensionCounter)
-$EventCounter.AllObjects = ($ToProcessLst.Count + $BadFolderCounter + $WrongExtensionCounter)
+$GenericCounter = [GenericCounter]::New()
+$GenericCounter.ToSort = ($ToProcessLst.Count)
+$GenericCounter.EFC = ($BadFolderCounter + $WrongExtensionCounter)
+$GenericCounter.AllObjects = ($ToProcessLst.Count + $BadFolderCounter + $WrongExtensionCounter)
 #
 ### [END] GetObjects ###
 
@@ -935,19 +991,25 @@ foreach ($Object in $ToProcessLst) {
         $NameArray = ("Doujinshi", $Matches.Convention, $Matches.Artist, $Matches.Title, $Matches.Meta)
     }
     # Anthologies
+    # Anthologies must be matched before Manga
     elseif($NormalizedObjectName -match "\A\W(Anthology)\W(?<Title>[^\[{(]*)(?<Meta>.*)"){
 
         # Every Anthology has $Artist defined as "Anthology" !
         $NameArray = ("Anthology", "", "Anthology", $Matches.Title, $Matches.Meta)
     }
     # Manga
+    # Reminder: Additional information like (Tankoubon) is part of Meta
+    # [Artist] Title (Tankoubon) [English] {5 a.m.} is split into
+    # [Artist]
+    # Title
+    # (Tankoubon) [English] {5 a.m.}
     elseif($NormalizedObjectName -match "\A\[(?<Artist>[^\]]*)\](?<Title>[^\[{(]*)(?<Meta>.*)"){
         $NameArray = ("Manga", "", $Matches.Artist, $Matches.Title, $Matches.Meta)
     }
     # NoMatch
     else {
         $NoMatchFlag = 1
-        $EventCounter.AddNoMatch()
+        $GenericCounter.AddNoMatch()
         Add-Skipped -SkippedObjects $SkippedObjects -Object $Object -Reason "NoMatch" -Extension $Extension
     }
 
@@ -972,24 +1034,24 @@ foreach ($Object in $ToProcessLst) {
             $null = New-Item -Path ($ObjectProperties.ObjectTarget) -ItemType "directory" # Create empty folder for $Artists/$Convention/AnthologY
             
             Add-TitleToLibrary -UserLibrary $UserLibrary -NameArray $NameArray -Object $Object -HashedID $HashedID
-            $EventCounter.AddSet($PublishingType)
+            $GenericCounter.AddSet($PublishingType)
         }
         elseif ( ! $UserLibrary.$Collection.ContainsKey($Title) ) {
 
             Add-TitleToLibrary -UserLibrary $UserLibrary -NameArray $NameArray -Object $Object -HashedID $HashedID
-            $EventCounter.AddTitle($PublishingType)
+            $GenericCounter.AddTitle($PublishingType)
         }
         elseif ($UserLibrary.$Collection.ContainsKey($Title) -and (! $UserLibrary.$Collection.$Title.VariantList.Contains($HashedID))) {
             
             Update-TitleAsVariant -NameArray $NameArray -ObjectProperties $ObjectProperties -ObjectMeta $ObjectMeta -ObjectSelector $ObjectSelector
             
             Add-TitleToLibrary -UserLibrary $UserLibrary -NameArray $NameArray -Object $Object -HashedID $HashedID -Variant
-            $EventCounter.AddTitle($PublishingType)
-            $EventCounter.AddVariant()
+            $GenericCounter.AddTitle($PublishingType)
+            $GenericCounter.AddVariant()
         }
         else {
             $IsDuplicate = $true
-            $EventCounter.AddDuplicate()
+            $GenericCounter.AddDuplicate()
 
             Add-Skipped -SkippedObjects $SkippedObjects -Object $Object -Reason "Duplicate" -Extension $Extension
         }
@@ -1004,7 +1066,7 @@ foreach ($Object in $ToProcessLst) {
         }
     }
     $SortingProgress += 1
-    $SortingCompleted = ($SortingProgress / $EventCounter.ToSort) * 100
+    $SortingCompleted = ($SortingProgress / $GenericCounter.ToSort) * 100
     Write-Progress -Id 0 -Activity "Sorting" -Status "$ObjectNameNEX" -PercentComplete $SortingCompleted
 }
 
@@ -1015,7 +1077,7 @@ Write-Output "Creating folder structure: Done`n"
 Write-Output "Analyzing objects: Done`n"
 Start-Sleep -Seconds 1.0
 
-$EventCounter.ComputeToCopy()
+$GenericCounter.ComputeToCopy()
 #
 ### [END] Sorting ###
 
@@ -1048,12 +1110,12 @@ foreach ($HashedID in $ToCopy.Keys) {
 
     # Progress bar
     $CopyProgress += 1
-    $CopyCompleted = ($CopyProgress / $EventCounter.ToCopy) * 100
+    $CopyCompleted = ($CopyProgress / $GenericCounter.ToCopy) * 100
     Write-Progress -Id 1 -Activity "Copying" -Status "$SourceID" -PercentComplete $CopyCompleted
 
     # Define XML source
     $XML_Folder = "$($PathsLibrary.ComicInfoFiles)\$TargetName"
-    $XML_FILE   = "$($PathsLibrary.ComicInfoFiles)\$TargetName\ComicInfo.xml"
+    $XML_FILE   = "\\?\$($PathsLibrary.ComicInfoFiles)\$TargetName\ComicInfo.xml"
 
 
 
@@ -1068,7 +1130,7 @@ foreach ($HashedID in $ToCopy.Keys) {
 
             if($SafeCopyFlag -eq 0){
                 $ToCopy.$HashedID.TargetHash =
-                (Get-FileHash -LiteralPath "$Target\$SourceID" -Algorithm MD5).hash
+                (Get-FileHash -LiteralPath "\\?\$Target\$SourceID" -Algorithm MD5).hash
             }
             else{
                 $ToCopy.$HashedID.TargetHash = 0
@@ -1081,15 +1143,17 @@ foreach ($HashedID in $ToCopy.Keys) {
                 $TargetID = "$TargetName$($ToCopy.$HashedID.NewExtension)"
 
                 try {
-                    Rename-Item -LiteralPath "$Target\$SourceID" -NewName $TargetID
+                    Rename-Item -LiteralPath "\\?\$Target\$SourceID" -NewName $TargetID
                 }
                 catch {
                     Add-NoCopy -SkippedObjects $SkippedObjects -Object $ToCopy.$HashedID -Reason "RenamingError"
                     Remove-FromLibrary -UserLibrary $UserLibrary -ObjectSelector $LibraryLookUp.$HashedID
                     Remove-ComicInfo -ObjectSelector $LibraryLookUp.$HashedID
-                    Remove-Item -LiteralPath $XMLpath -Force
 
-                    $EventCounter.AddCopyError()
+                    # Remove copied object
+                    Remove-Item -LiteralPath -LiteralPath "\\?\$Target\$SourceID"-Force
+
+                    $GenericCounter.AddCopyError()
                     Continue
                 }
                 
@@ -1115,7 +1179,9 @@ foreach ($HashedID in $ToCopy.Keys) {
                     catch {
                         $CopyErrorFlag = 1
                         $ErrorType = "XMLinsertionError"
-                        Remove-Item -LiteralPath "$Target\$TargetID" -Force
+
+                        # Remove copied object
+                        Remove-Item -LiteralPath "\\?\$Target\$TargetID" -Force
                     }
                 }
                 elseif ($VersionMajor -gt 5) {
@@ -1125,7 +1191,9 @@ foreach ($HashedID in $ToCopy.Keys) {
                     if ($SevenZipError -ne 0) {
                         $CopyErrorFlag = 1
                         $ErrorType = "XMLinsertionError"
-                        Remove-Item -LiteralPath "$Target\$TargetID" -Force
+
+                        # Remove copied object
+                        Remove-Item -LiteralPath "\\?\$Target\$TargetID" -Force
                     }
                 }
                 #
@@ -1158,7 +1226,7 @@ foreach ($HashedID in $ToCopy.Keys) {
             Remove-FromLibrary -UserLibrary $UserLibrary -ObjectSelector $LibraryLookUp.$HashedID
             Remove-ComicInfo -ObjectSelector $LibraryLookUp.$HashedID
 
-            $EventCounter.AddCopyError()
+            $GenericCounter.AddCopyError()
             Continue
         }
 
@@ -1212,7 +1280,7 @@ foreach ($HashedID in $ToCopy.Keys) {
                 $CopyErrorFlag = 1
                 $ErrorType = "HashMismatch"
             }
-            # Remove the unzipped folder.
+            # Remove the unzipped folder - always.
             Remove-Item -LiteralPath "$Target\$TargetName" -Recurse -Force
         }
         else {
@@ -1228,12 +1296,12 @@ foreach ($HashedID in $ToCopy.Keys) {
         Add-NoCopy -SkippedObjects $SkippedObjects -Object $ToCopy.$HashedID -Reason $ErrorType
         Remove-FromLibrary -UserLibrary $UserLibrary -ObjectSelector $LibraryLookUp.$HashedID
         Remove-ComicInfo -ObjectSelector $LibraryLookUp.$HashedID
-        $EventCounter.AddCopyError()        
+        $GenericCounter.AddCopyError()        
     }
     elseif($CopyErrorFlag -eq 0){
 
         $null = $CopiedObjects[$SourceID] = @{"Source" = $ToCopy.$HashedID.ObjectSource; "Extension" = $ToCopy.$HashedID.Extension }
-        $EventCounter.AddCopyGood()
+        $GenericCounter.AddCopyGood()
     }
 }
 
@@ -1281,12 +1349,12 @@ else{
 
 $UserLibrary | Export-Clixml -Path "$($PathsProgram.Libs)\UserLibrary $($SettingsHt.LibraryName).xml" -Force
 
-# Serialize CopiedObjectsHt - necessary DeleteOriginals.ps1 in Tools.
+# Serialize CopiedObjectsHt - currently not used.
 $CopiedObjects | Export-Clixml -Path "$($PathsProgram.Copied)\CopiedObjects $($SettingsHt.LibraryName).xml" -Force
 
-$EventCounter.ComputeSkipped()
+$GenericCounter.ComputeSkipped()
 
-$EventCounter.ComputeCollections()
+$GenericCounter.ComputeCollections()
 
 
 Show-Information -InformationArray (" ", "Script finished", " ")
@@ -1308,32 +1376,32 @@ SUMMARY [$Timestamp]
 
 > TotalCopyingTime: $TotalCopyingTime
 
-# FoundObjects: $($EventCounter.AllObjects)
+# FoundObjects: $($GenericCounter.AllObjects)
 =================================================
 
-> Successfully Copied Objects: $($EventCounter.CopyGood)
+> Successfully Copied Objects: $($GenericCounter.CopyGood)
 
-> CopyCompleteness (should be 0): $($EventCounter.ToCopy - $CopyProgress )
+> CopyCompleteness (should be 0): $($GenericCounter.ToCopy - $CopyProgress )
 
-> Total number of Collections: $($EventCounter.Collections)
+> Total number of Collections: $($GenericCounter.Collections)
 
-> Found $($EventCounter.Manga) Manga from $($EventCounter.Artists) Artists
+> Found $($GenericCounter.Manga) Manga from $($GenericCounter.Artists) Artists
 
-> Found $($EventCounter.Doujinshi) Doujinshi from $($EventCounter.Conventions) Conventions
+> Found $($GenericCounter.Doujinshi) Doujinshi from $($GenericCounter.Conventions) Conventions
 
-> Found $($EventCounter.Anthologies) Anthologies
+> Found $($GenericCounter.Anthologies) Anthologies
 
-> Found $($EventCounter.Variants) Variants
+> Found $($GenericCounter.Variants) Variants
 
 
-# Skipped Objects: $($EventCounter.Skipped)
+# Skipped Objects: $($GenericCounter.Skipped)
 =================================================
 
-> Duplicates: $($EventCounter.Duplicates)
+> Duplicates: $($GenericCounter.Duplicates)
 
-> UnmatchedObjects: $($EventCounter.NoMatch)
+> UnmatchedObjects: $($GenericCounter.NoMatch)
 
-> Copy Errors: $($EventCounter.CopyErrors)
+> Copy Errors: $($GenericCounter.CopyErrors)
 
 > Single files with
   wrong extension (.mov,.mp4,.pdf,...): $WrongExtensionCounter

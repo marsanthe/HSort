@@ -44,7 +44,7 @@ function Update-CopiedLog{
 
     )
 
-    $FilePath = "$TargetDir\ObjectLog.txt"
+    $FilePath = "$TargetDir\ProcessedObjects.txt"
 
     New-Header -Name "Copied Objects" -FilePath $FilePath
     
@@ -64,7 +64,7 @@ function Update-CopiedLog{
     
         }
 
-        Export-Csv -InputObject $Item_Log -Path "$TargetDir\ObjectLog.csv" -NoTypeInformation -Append
+        Export-Csv -InputObject $Item_Log -Path "$TargetDir\ProcessedObjects.csv" -NoTypeInformation -Append
     
         $Property0 = @{
         expression = "Source"
@@ -89,48 +89,51 @@ function Update-CopiedLog{
     }
 }
 
-function Update-SkippedLog{
+function Update-ExcludedLog{
 
     Param(
         [Parameter(Mandatory)]
-        [hashtable]$SkippedObjects,
+        [hashtable]$ExcludedObjects,
 
         [Parameter(Mandatory)]
         [string]$TargetDir
 
     )
 
-    $FilePath = "$TargetDir\SkippedObjects.txt"
+    $FilePath = "$TargetDir\ExcludedObjects.txt"
 
-    New-Header -Name "Skipped Objects" -FilePath $FilePath
+    foreach($Obj in $ExcludedObjects.Keys){
 
-    foreach ($Parent in $SkippedObjects.Keys){
+        $CustomObject = [PSCustomObject]@{
+            
+            ParentPath = "{0}" -f ($ExcludedObjects.$Obj.ParentPath)
+            # Path       = "{0}" -f ($ExcludedObjects.$Obj.Path)
+            Name       = "{0}" -f ($ExcludedObjects.$Obj.ObjectName)
+            # Extension  = "{0}" -f ($ExcludedObjects.$Obj.Extension)
+            Reason     = "{0}" -f ($ExcludedObjects.$Obj.Reason)
 
-        New-Header -Name "Parent Dir: $Parent" -FilePath $FilePath -Subheader
-
-        foreach($Object in $SkippedObjects.$Parent.Keys){
-
-            $SkippedObjectProperties = $SkippedObjects.$Parent.$Object
-
-            $SkippedFilesLog = [PSCustomObject]@{
-        
-                Path = "{0}" -f ($SkippedObjectProperties.Path)
-                Reason = "{0}" -f ($SkippedObjectProperties.Reason)
-
-            }
-        
-            $Property0 = @{
-            expression = "Path"
-            width = 160}
-        
-            $Property1 = @{
-            expression = "Reason"
-            width = 60}
-        
-            $SkippedFilesLog | Format-Table -Property $Property0,
-            $Property1 -Wrap | Out-File -FilePath $FilePath -Encoding unicode -Width 400 -Append -Force
         }
+
+        $Property0 = @{
+            expression = "ParentPath"
+            width = 160
+        }
+        
+        $Property1 = @{
+            expression = "Name"
+            width = 160
+        }
+        $Property2 = @{
+            expression = "Reason"
+            width      = 60
+        }
+        
+        $CustomObject | Format-Table -Property $Property0,
+        $Property1,$Property2 -Wrap | Out-File -FilePath $FilePath -Encoding unicode -Width 400 -Append -Force
+
+        Export-Csv -InputObject $CustomObject -Path "$TargetDir\ExcludedObjects.csv" -NoTypeInformation -Append
     }
+
 }
 
 function Add-TimingLogEntry{
@@ -176,4 +179,4 @@ function Add-TimingLogEntry{
     $Property2 -Wrap | Out-File -FilePath "$Path\$Timestamp $FileName.txt" -Encoding unicode -Width 260 -Append -Force
 }
 
-Export-ModuleMember -Function Update-CopiedLog, Update-SkippedLog
+Export-ModuleMember -Function Update-CopiedLog, Update-ExcludedLog

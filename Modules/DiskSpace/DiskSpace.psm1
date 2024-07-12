@@ -1,4 +1,11 @@
 function Assert-SufficientDiskSpace{
+    <# 
+    .SYNOPSIS
+    Checks if diskspace is sufficient.
+    .DESCRIPTION
+    Checks if diskspace is sufficient and
+    returns DiskSpace_ExitCode.
+    #>
 
     Param(
         [Parameter(Mandatory)]

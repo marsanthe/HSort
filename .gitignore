@@ -1,2 +1,7 @@
+/AutomatedTesting
+/Application_Information
 /Dump
+/Modules/SkippedObjectsHandler
+/Modules/ManifestTemplate.ps1
+/Modules/InitializeScript/InitScriptV2.ps1
 HSort.code-workspace

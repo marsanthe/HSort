@@ -1,37 +1,264 @@
 
 using namespace System.Collections.Generic
 
-$Directory = Split-Path -Parent(Get-Location) # Parent( (Get-Location == Tools) ) == HSort 
+$ErrorActionPreference = "Stop"
+$DebugPreference = "Continue"
 
+$Directory = Split-Path -Parent(Get-Location) # Parent( (Get-Location == Tools) ) == HSort 
 
 # To import module, Script has to be executed from .\HSort\Tools !
 Import-Module -Name "$Directory\Modules\InitializeScript\InitializeScript.psm1"
 
+#===========================================================================
+# Functions
+#===========================================================================
 
-<# 
-    .SYNOPSIS
-        Move skipped objects to a folder.
-    .DESCRIPTION
-        Move skipped objects to a folder named "Skipped [LibraryName]".
-        The skipped objects are sorted into different sub-folders named after their parent folder.
-    .INPUTS
-        LibraryName
-            The name of the library.
-            To move the files that were skipped during the creation of this library.
-        TargetDir
-            The Directory to create "Skipped [LibraryName]" in. 
-#>
+function Assert-ValidString{
 
-$SkippedDir = "$HOME\AppData\Roaming\HSort\SkippedObjects"
-$VisitedDir = "$HOME\AppData\Roaming\HSort\ApplicationData"
+    Param(
+        [Parameter(Mandatory,Position = 0)]
+        $string
+    )
 
-Show-Information -InformationArray (" ",
+    [bool]$Value
+
+    if ($string -match "^[\w\+\-]+$") {
+        $Value = $true
+    }
+    else {
+        $Value = $false
+    }
+
+    # Write-Host "Value: $Value"
+
+    return $Value
+}
+function Read-SrcDirTree {
+
+    Param(
+        [Parameter(Mandatory)]
+        [string]$Path
+    )
+
+    
+    $AllSrcDirTrees = @{}
+
+    # Structure of the [SrcDirTree LibraryName.txt] file
+    #
+    # [SectionOne_Name]
+    # key = value
+    # .
+    # .
+    # .
+    # key = value
+    #
+    # [SectionTwo_Name]
+    # key = value
+    # .
+    # .
+    # .
+    # key = value
+    #
+    # ...
+    
+    # [SrcDirTree] must be defined here _initially_
+    # to allow us to add the first SECTION to [AllSrcDirTrees]
+    $SrcDirTree = [ordered]@{}
+    $SectionCounter = 0
+
+    foreach ($line in [System.IO.File]::ReadLines($Path)) {
+        
+        if ($line -ne "" -and -not $line.StartsWith("#")) {
+
+            if ($line -match "^\[(?<Source>.+)\]") {
+
+                $SectionCounter++
+
+                if ($SrcDirTree.Count -gt 0) {
+                    if(-not $AllSrcDirTrees.ContainsKey($Source)){
+                        $null = $AllSrcDirTrees.Add($Source, $SrcDirTree)
+                    }
+                    # If a section for a source already exists,
+                    # replace the old directory-tree with the new one.
+                    #
+                    # SrcDirTree.txt shall therefore be ordered ascending by date (Out-File ... -Append)
+                    else{
+                        $AllSrcDirTrees.$Source = $SrcDirTree
+                    }
+                    $SrcDirTree = [ordered]@{}
+                }
+                # Keep this order.
+                # This must not be put into an else{} statement.
+                $Source = $Matches.Source
+
+            }
+            # Match the parent node
+            # Create new [CurrentPnode] key in [SrcDirTree]
+            # that points to an empty list.
+            elseif ($line -match "(?<Argument>^Pnode) = (?<PnodePath>.+)"){
+
+                $CurrentPnode = $Matches.PnodePath
+                $SrcDirTree.Add($CurrentPnode, [List[String]]::new())
+            }
+            # Match the child nodes
+            # Add child nodes to the list of [CurrentPnode] 
+            elseif ($line -match "(?<Argument>^Cnode) = (?<CnodePath>.+)"){
+                $SrcDirTree.$CurrentPnode.Add($Matches.CnodePath)
+            }
+        }
+    }
+
+    # This adds the last Section to [$AllSrcDirTrees]
+    if ($SrcDirTree.Count -gt 0) {
+        if(-not $AllSrcDirTrees.ContainsKey($Source)){
+            $null = $AllSrcDirTrees.Add($Source, $SrcDirTree)
+        }
+        else{ # Update $AllSrcDirTrees - SrcDirTree.txt shall be ordered ascending by date (Out-File ... -Append)
+            $AllSrcDirTrees.$Source = $SrcDirTree
+        }
+        $SrcDirTree = [ordered]@{}
+    }
+
+    return $AllSrcDirTrees
+}
+
+function Select-FromHashtable{
+
+    Param(
+        [Parameter(Mandatory)]
+        [hashtable]$Hashtable,
+
+        [Parameter(Mandatory)]
+        [string]$Name
+    )
+
+    $SelectionHashtable = [ordered]@{}
+
+    Write-Information -MessageData " " -InformationAction Continue
+
+    $i = 0
+    foreach ($Key in $Hashtable.Keys) {
+
+        $SelectionHashtable.Add("$i", $Key)
+
+        Write-Information -MessageData "[$i] $Key" -InformationAction Continue
+        $i += 1
+    }
+
+    Write-Information -MessageData " " -InformationAction Continue
+
+
+    while ($true) {
+
+        $UserInput = Read-Host "Enter a number to select a $Name. Enter [n] to exit."
+
+        Write-Information -MessageData " " -InformationAction Continue
+
+        if ($UserInput -match "^\d+$") {
+            if ($SelectionHashtable.Contains($UserInput)) {
+                $KeyName = $SelectionHashtable.$UserInput
+                break
+            }
+            else {
+                Write-Information -MessageData "Please enter a number corresponding to a $Name. Enter [n] to exit." -InformationAction Continue
+            }
+        }
+        else {
+            if ($UserInput -eq "n") {
+                Write-Information -MessageData "Exiting..." -InformationAction Continue
+                exit
+            }
+            else {
+                Write-Information -MessageData "Please enter a number corresponding to a $Name. Enter [n] to exit." -InformationAction Continue
+            }
+        }
+    }
+
+    Write-Information -MessageData "You selected $KeyName" -InformationAction Continue
+
+    return $KeyName
+}
+
+function Move-Folder {
+
+    Param(
+
+        [Parameter(Mandatory)]
+        [string]$ObjSrcPath,
+
+        [Parameter(Mandatory)]
+        [string]$ExcludedFolderPath,
+
+        [Parameter(Mandatory)]
+        [string]$RelPath,
+
+        [switch]$Pretend
+    )
+
+    $ObjTargetPath = "$ExcludedFolderPath\$RelPath"
+
+    if(-not $Pretend){
+
+        $null = robocopy $ObjSrcPath $ObjTargetPath  /move /njh /njs
+        $RobocopyExitCode = $LASTEXITCODE
+        if ($RobocopyExitCode -ne 1) {
+            Write-Information -MessageData "Container doesn't exist." -InformationAction Continue
+            $ErrorCounter += 1
+        }
+    }
+    else{
+        Write-Information -MessageData "`nMoving Folder..." -InformationAction Continue
+        Write-Information -MessageData "[From] $ObjSrcPath" -InformationAction Continue
+        Write-Information -MessageData "[To]   $ObjTargetPath" -InformationAction Continue
+    }
+
+}
+
+function Move-File {
+
+    Param(
+
+        [Parameter(Mandatory)]
+        [hashtable]$ExcludedObject,
+
+        [Parameter(Mandatory)]
+        [string]$ExcludedFolderPath,
+
+        [switch]$Pretend
+    )
+
+    $ObjTargetPath = "$ExcludedFolderPath\$($ExcludedObject.RelativeParentPath)"
+    
+    $ObjTargetPath = $ObjTargetPath.trim("\")
+    
+    if(-not $Pretend){
+
+        $null = robocopy $ExcludedObject.ParentPath $ObjTargetPath $ExcludedObject.ObjectName /mov /njh /njs
+        $RobocopyExitCode = $LASTEXITCODE
+        if ($RobocopyExitCode -ne 1) {
+            Write-Information -MessageData "[Error moving container] $($ExcludedObject.ObjectName)." -InformationAction Continue
+            $ErrorCounter += 1
+        }
+    }
+    else{
+        Write-Information -MessageData "`nMoving File..." -InformationAction Continue
+        Write-Information -MessageData "[Name] $($ExcludedObject.ObjectName)" -InformationAction Continue
+        Write-Information -MessageData "[From] $($ExcludedObject.ParentPath)" -InformationAction Continue
+        Write-Information -MessageData "[To]   $ObjTargetPath" -InformationAction Continue
+    }
+}
+
+#===========================================================================
+# Begin Main
+#===========================================================================
+
+Write-Paragraph -InformationArray (" ",
 "INFORMATION",
 "==========================",
-"This script is meant to be run after a Library was created from a Source-folder.",
-"If objects from this Source-folder were skipped, this script will MOVE them to a folder named:",
-"SkippedObjects from [YourLibraryName]",
-"Each object is in turn placed into a folder named by the object's parent-folder.",
+"This script is meant to be run after a Library was created from a source folder.",
+"If objects from this source folder were excluded, this script will MOVE them to a folder named:",
+"ExcludedObjects from [YourLibraryName]",
+
 "This helps you to get an overview over Objects that you might want to add to the library manually,",
 "(like Manga not following the E-Hentai naming-scheme), or sort otherwise."," ")
 
@@ -46,174 +273,187 @@ if ($UserInput -eq "n"){
 }
 
 
-$LibraryName = Read-Host "Please enter the name of the library in question"
-    
-try {
-    $SkippedXML = Import-Clixml -Path "$SkippedDir\Skipped $LibraryName.xml"
-    
-}
-catch {
-    Write-Information "$SkippedDir\Skipped $LibraryName.xml not found. Exiting"
-    exit
-}
-
-try {
-    $VisitedObjects = Import-Clixml -Path "$VisitedDir\VisitedObjects $LibraryName.xml"
-}
-catch {
-    Write-Information "$VisitedDir\VisitedObjects $LibraryName.xml not found. Exiting"
-    exit
-}
-
-
-
-$TargetDir = Read-Host "`nWhere would you like to create the SkippedObjects folder?`n"
+#===========================================================================
+# User Input: Where to create [Excluded from Library] folder
+#===========================================================================
 
 while ($True) {
-    if (!(Test-Path $TargetDir)) {
-        $TargetDir = Read-Host "This directory doesn't exist. Please enter a different path."
+    $ExcludedFolderLocation = Read-Host "`nWhere would you like to create the [Excluded from $LibraryName] folder?`n"
+
+    if (!(Test-Path $ExcludedFolderLocation)) {
+        $ExcludedFolderLocation = Read-Host "This directory doesn't exist. Please enter a different path."
     }
-    elseif (Test-Path "$TargetDir\Skipped $LibraryName") {
-        $TargetDir = Read-Host "This directory already contains a folder named: Skipped $LibraryName. Please enter a different path."
+    elseif (Test-Path "$ExcludedFolderLocation\ExcludedObjects from $LibraryName") {
+        $ExcludedFolderLocation = Read-Host "This directory already contains a folder named: [Excluded $LibraryName].`nPlease enter a different path."
     }
-    else{
+    else {
+        $ExcludedFolderName = "Excluded from $LibraryName"
+        $ExcludedFolderPath = "$ExcludedFolderLocation\$ExcludedFolderName"
+        $null = New-Item -Path $ExcludedFolderLocation -ItemType Directory -Name $ExcludedFolderName #-WhatIf
         break
     }
 }
 
 
-$PathsSkipped = [ordered]@{
-    "Base"         = "$TargetDir\SkippedObjects from $LibraryName";
-    # "NoMatch"      = "$TargetDir\SkippedObjects from $LibraryName\NoMatch";
-    # "Duplicates"   = "$TargetDir\SkippedObjects from $LibraryName\Duplicates";
-    # "HashMismatch" = "$TargetDir\SkippedObjects from $LibraryName\HashMismatch";
-    # "Other"        = "$TargetDir\SkippedObjects from $LibraryName\Other"
+#===========================================================================
+# User Input: Select target library
+#===========================================================================
+
+<# 
+The excluded objects of which library do you want to move?
+#>
+if ((Test-Path "$HOME\AppData\Roaming\HSort\Settings\SettingsHistory.xml")){
+    
+    $SettingsHistory = Import-Clixml -LiteralPath "$HOME\AppData\Roaming\HSort\Settings\SettingsHistory.xml"
+}
+else{
+    
+    Write-Information -MessageData "SettingsHistory not found.`nExiting..."
+    Exit
 }
 
+Write-Head("Select Target Library")
+Write-Paragraph -InformationArray ("The excluded objects of which library do you want to move?,")
+$LibraryName = Select-FromHashtable -Hashtable $SettingsHistory -Name "Library"
 
-foreach ($Path in $PathsSkipped.Keys) {
-    if (!(Test-Path $PathsSkipped.$Path)) {
-        $null = New-Item -ItemType "directory" -Path $PathsSkipped.$Path
+
+
+
+
+#===========================================================================
+# Create Hashtable from [AllSrcDirTrees.txt]
+#===========================================================================
+
+#$SrcDirTree = Read-SrcDirTree -Path "$HOME\AppData\Roaming\HSort\LibraryFiles\$LibraryName\SrcDirTree $LibraryName.txt"
+$AllSrcDirTrees = Read-SrcDirTree -Path "$HOME\AppData\Roaming\HSort\LibraryFiles\$LibraryName\SrcDirTree $LibraryName.txt"
+
+#===========================================================================
+# User Input: Select build folder of target library
+# (In case the library was build from multiple folders.)
+#===========================================================================
+
+Write-Head("Select source folder")
+
+Write-Paragraph -InformationArray ("If your library was build from multiple sources,",
+"you can select the right source folder now.")
+
+$SrcPath = Select-FromHashtable -Hashtable $AllSrcDirTrees -Name "Source folder"
+
+$SrcDirTree = [ordered]@{}
+$SrcDirTree = $AllSrcDirTrees.$SrcPath
+
+Write-Host " "
+
+foreach ($Pnode in $SrcDirTree.Keys){
+    Write-Debug "Pnode: $Pnode"
+    foreach($Cnode in $SrcDirTree.$Pnode){ # this is a list
+        Write-Debug "Cnode: $Cnode"
     }
 }
 
 
-$TotalMoved = 0
-$TotalMoveError = 0
 
-$MovedObjects = [List[object]]::new()
-$MoveErrorObjects = [List[object]]::new()
+#===========================================================================
+# User Input: Final confirmation before moving objects
+#===========================================================================
 
-Show-Information -InformationArray (" ","Please wait. Moving objects..."," ")
+while($true){
+    $UserResponse = Read-Host "Press [y] to continue to move the Excluded files from $SrcPath.`nPress [n] to exit."
+    if($UserResponse -eq "y"){
+        break
+    }
+    elseif($UserResponse -eq "n"){
+        Write-Information -MessageData "Moving Excluded objects cancelled.`nExiting..." -InformationAction Continue
+        Exit
+    }
+    else{
+        Write-Information -MessageData "Please enter [y] to continue or [n] to exit." -InformationAction Continue
+    }
+}
 
+#===========================================================================
+# Create pruned mirror of SrcDir 
+#===========================================================================
 
-foreach($Parent in $SkippedXML.Keys){
+# Pnode and Cnode are always relative paths !!!
+foreach ($Pnode in $SrcDirTree.Keys) {
 
-    $ParentName = Split-Path -Path $Parent -Leaf
+    # The full path with respect to ExcludedFolderPath
+    $PnodeFullPath = "$ExcludedFolderPath\$Pnode"
+    
+    Write-Debug "Parent: $Pnode"
 
-    $null = New-Item -Name $ParentName -ItemType "directory" -Path $PathsSkipped.Base
+    if ( -not (Test-Path -LiteralPath "$ExcludedFolderPath\$Pnode")) {
 
-    $ObjTargetDir = "$($PathsSkipped.Base)\$ParentName"
+        New-Item -Path $ExcludedFolderPath -ItemType Directory -Name $Pnode #-WhatIf
+    }
 
-    foreach ($Object in $SkippedXML.$Parent.Keys) {
+    # List of direct child-nodes
+    $Cnodes = $SrcDirTree.$Pnode
 
-        $ErrorFlag = 0
-        
-        $Source = $SkippedXML.$Parent.$Object.Path
-        $Name = $SkippedXML.$Parent.$Object.ObjectName # The object name with extension
-        $ParentDir = $SkippedXML.$Parent.$Object.ObjectParent
-        
-        Write-Information -MessageData "[Moving] $Name" -InformationAction Continue
+    # Check if root node is not a dead end
+    if ($Cnodes[0] -ne $Pnode) {
+        # ... create new folder for every Cnode in Pnode
+        foreach ($Cnode in $Cnodes) {
 
-        if ($SkippedXML.$Parent.$Object.Extension -eq "Folder") {
+            Write-Debug "Child: $Cnode"
 
-            try{ 
-                $null = robocopy $Source "$ObjTargetDir\$Name" /E /DCOPY:DAT /move
-                $TotalMoved += 1
-            }
-            catch {
-                Write-Information "[Error moving] $Name" -InformationAction Continue
-                $TotalMoveError += 1
-                $ErrorFlag = 1
-            }
-
-            if($ErrorFlag -eq 0){
-                $VisitedObjects.Remove($Object)
-                $MovedObjects.Add($Object)
-            }
-            else{
-                $MoveErrorObjects.Add($Object)
-            }
+            New-Item -Path $PnodeFullPath -ItemType Directory -Name $Cnode #-WhatIf
 
         }
-        else{
-
-            try{
-                $null = robocopy $ParentDir $ObjTargetDir $Name /move
-                $TotalMoved += 1
-            }
-            catch {
-                Write-Information "[Error moving] $Name" -InformationAction Continue
-                $TotalMoveError += 1
-                $ErrorFlag = 1
-            }
-
-            if ($ErrorFlag -eq 0) {
-                $VisitedObjects.Remove($Object)
-                $MovedObjects.Add($Object)
-            }
-            else {
-                $MoveErrorObjects.Add($Object)
-            }
-
-        }
     }
 }
 
+#===========================================================================
+# Move Excluded objects
+#===========================================================================
 
-# Update this instance of the Skipped hashtable |---
-foreach ($Parent in $SkippedXML.Keys) {
-    foreach ($Object in $MovedObjects) {
-        $SkippedXML.$Parent.Remove($Object)
+
+if ((Test-Path "$HOME\AppData\Roaming\HSort\LibraryFiles\$LibraryName\Excluded $LibraryName.xml")) {
+    
+    $ExcludedXML = Import-Clixml -LiteralPath "$HOME\AppData\Roaming\HSort\LibraryFiles\$LibraryName\Excluded $LibraryName.xml"
+
+}
+else {
+
+    Write-Information -MessageData "Excluded xml not found.`nExiting..."
+    Exit
+}
+
+
+Write-Head("Source folders")
+
+$LibrarySourceName = Select-FromHashtable -Hashtable $ExcludedXML -Name "Source folder"
+
+$Excluded = $ExcludedXML.$LibrarySourceName.Excluded
+
+foreach($Object in $Excluded.Keys){
+    if($Excluded.$Object.Extension -eq "Folder"){
+        Move-Folder -ObjSrcPath $Excluded.$Object.Path -ExcludedFolderPath $ExcludedFolderPath -RelPath $Excluded.$Object.RelativePath #-Pretend
+    }
+    else{
+        Move-File -ExcludedObject ($Excluded.$Object) -ExcludedFolderPath $ExcludedFolderPath #-Pretend
     }
 }
 
-# ---> Export and overwrite old Skipped hashtable
-$SkippedXML | Export-Clixml -Path "$SkippedDir\Skipped $LibraryName.xml" -Force
+#===========================================================================
+# Restore Test Data - for Script Testing
+#===========================================================================
 
-Show-Information -InformationArray (" ", "Finished moving objects", " ")
+while($true){
+    $response = Read-Host "Restore test data?"
+    if($response -eq "y"){
+        $Name = (Get-Item -LiteralPath $SrcPath).BaseName
+        Remove-Item -LiteralPath $SrcPath -Recurse -Force
+        New-Item -Path "F:\TestsExt" -ItemType "Directory" -Name "$Name"
+        $null = robocopy "F:\TestsExt\BackUp\$Name" "F:\TestsExt\$Name" /e /njh /njs
+        break
+    }
+    elseif($Response -eq "n"){
 
-$Head = @"
-
-Summary of moved Objects
-=================================================
-
-[Based on the last scan of: $LibraryName]
-
-# Total objects moved: $TotalMoved
-=================================================
-
-"@
-
-$Head | Out-File -FilePath "$($PathsSkipped.Base)\MovedObjects Log.txt" -Encoding unicode -Append -Force
-
-foreach ($Object in $MovedObjects) {
-    $S = "$Object"
-    $S | Out-File -FilePath "$($PathsSkipped.Base)\MovedObjects Log.txt" -Encoding unicode -Append -Force
-}
-
-
-
-$Subhead = @"
-
-# Objects not moved: $TotalMoveError
-=================================================
-
-"@
-
-$Subhead | Out-File -FilePath "$($PathsSkipped.Base)\MovedObjects Log.txt" -Encoding unicode -Append -Force
-
-foreach ($Object in $MoveErrorObjects) {
-    $S = "$Object"
-    $S | Out-File -FilePath "$($PathsSkipped.Base)\MovedObjects Log.txt" -Encoding unicode -Append -Force
+        break
+    }
+    else{
+        Write-Information -MessageData "Please enter [y] or [n]"
+    }
 }

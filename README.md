@@ -48,7 +48,7 @@ HSort will find them.
 - Automatic tagging of your Manga + support for custom tags !
 - Creates detailed reports for:
     - Items that were successfully sorted/copied 
-    - Items that were skipped (and why they were skipped)
+    - Items that were Excluded (and why they were Excluded)
     - An overview over the number of Manga, Doujinshi and Anthologies<br> 
     and number of different Artists and Conventions in your library
 - and more -> check the Wiki !
